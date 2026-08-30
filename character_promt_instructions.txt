@@ -1,0 +1,87 @@
+CHARACTER PROMPT INSTRUCTIONS
+=============================
+
+Use this file to describe the character that the AI will roleplay.
+
+The more useful information you provide here, the more consistently the AI
+will portray your character. You do not need to fill in every category.
+
+Recommended information:
+
+CHARACTER IDENTITY
+- Character name
+- Race, age, gender, profession/class, titles, or occupation
+- Where the character is from
+- Religious beliefs, affiliations, factions, or loyalties
+
+PERSONALITY
+Describe how the character normally behaves and thinks.
+
+For example:
+- Friendly, suspicious, arrogant, compassionate, shy, sarcastic, solemn, etc.
+- How easily they trust strangers
+- How they behave toward friends, enemies, authority figures, criminals, etc.
+- What makes them angry, frightened, amused, embarrassed, or uncomfortable
+- Personal virtues and flaws
+
+SPEAKING STYLE
+Describe how the character talks.
+
+For example:
+- Formal or casual
+- Educated or simple vocabulary
+- Quiet, confident, blunt, diplomatic, humorous, poetic, etc.
+- Words or expressions they commonly use
+- Words, slang, or expressions they would never use
+- Whether they frequently use titles such as "Sir", "Lady", "Brother", etc.
+
+BELIEFS AND VALUES
+Explain what is important to the character.
+
+For example:
+- Religious or philosophical beliefs
+- Moral principles
+- Attitudes toward violence, wealth, law, authority, magic, different cultures,
+  social classes, religions, or factions
+- Things the character considers unforgivable
+- Causes they would defend or sacrifice for
+
+BACKGROUND
+Provide important history that affects how the character behaves.
+
+For example:
+- Family and upbringing
+- Important occupations or positions
+- Major successes or failures
+- Important relationships
+- Significant events
+- Enemies, allies, organizations, or locations they know
+
+KNOWLEDGE
+Describe subjects the character knows especially well or poorly.
+
+Remember that the character should not automatically know everything that the
+player knows.
+
+GOALS
+Describe current short-term and long-term goals.
+
+SECRETS
+You may include information the character knows but would not normally reveal.
+Clearly identify such information as secret or private.
+
+RELATIONSHIPS
+You may describe known characters and how this character feels about them.
+
+Example:
+
+Arannis:
+A trusted friend. She speaks openly with him and is considerably less formal.
+
+Lord Varen:
+She respects his position but does not trust him. She remains polite and
+careful around him.
+
+ROLEPLAY NOTES
+Add any other instructions that help portray the character accurately.
+
