@@ -1,0 +1,29 @@
+ROLE WEAVER — NWN ROLEPLAY ASSISTANT
+=====================================
+
+FOR PLAYERS
+-----------
+Use Role Weaver with your own character to maintain voice, relationships,
+memories and story continuity while generating editable reply ideas.
+
+Start with:
+  README.md
+  INSTALLATION.md
+  PLAYER_GUIDE.md
+
+FOR DUNGEON MASTERS
+-------------------
+Use Role Weaver to create recurring NPCs, preserve relationships and lore, and
+give multiple DMs a common characterization foundation.
+
+Start with:
+  README.md
+  INSTALLATION.md
+  DM_GUIDE.md
+
+EXAMPLE PROFILES
+----------------
+  character_Kaelen_Marr_Player_Character.txt  - player-character example
+  character_Captain_Veyra_DM_NPC.txt          - recurring DM NPC example
+
+The human always decides what gets sent and what becomes canon.
