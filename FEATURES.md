@@ -108,3 +108,20 @@ Changing the AI provider immediately changes the model field to that provider's
 default model. This prevents provider-specific model identifiers from carrying
 over accidentally, such as a Gemini model remaining selected after switching
 to OpenAI.
+
+## Adaptive Characters (v1.2 alpha5)
+- Learns recurring correction preferences from AI drafts that the player edits and actually sends in NWN.
+- Uses the final line observed in the NWN log as authoritative; unsent drafts never teach correction learning.
+- Proposes durable Character Development only after repeated IC evidence and keeps every proposal inactive until player approval.
+- Approved development influences future portrayal without rewriting the original character profile file.
+- Rejected development is remembered to reduce repeated unwanted proposals.
+
+## Campaign Manager
+- Campaign description and Current Situation
+- Ordered Story Beats: Planned / Active / Completed / Skipped
+- Objectives / Open Questions
+- Important Locations
+- Player / Party DM Notes kept separate from Player Knowledge
+- Editable Session Log and draft summaries from NPC continuity
+- NPC roster with direct NPC Briefing access
+- Campaign Briefing incorporates active campaign-management data

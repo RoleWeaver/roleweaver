@@ -17,6 +17,14 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
+      - name: Read Role Weaver version
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          if (-not $version) { throw "VERSION is empty." }
+          "ROLEWEAVER_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Building Role Weaver $version"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -40,30 +48,43 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force release | Out-Null
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "installer\RoleWeaver.iss"
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$env:ROLEWEAVER_VERSION" "installer\RoleWeaver.iss"
 
       - name: Create portable ZIP
         shell: pwsh
         run: |
-          Compress-Archive -Path "dist\RoleWeaver\*" -DestinationPath "release\RoleWeaver-Portable-v1.0.0.zip" -Force
+          Compress-Archive -Path "dist\RoleWeaver\*" -DestinationPath "release\RoleWeaver-Portable-v$env:ROLEWEAVER_VERSION.zip" -Force
+
+      - name: Create Nexus Mods portable ZIP
+        shell: pwsh
+        run: |
+          Copy-Item "NEXUSMODS_README.txt" "dist\RoleWeaver\NEXUSMODS_README.txt" -Force
+          Compress-Archive -Path "dist\RoleWeaver\*" -DestinationPath "release\RoleWeaver-Nexus-v$env:ROLEWEAVER_VERSION.zip" -Force
 
       - name: Generate SHA256 checksums
         shell: pwsh
         run: |
-          Get-FileHash "release\RoleWeaver-Setup-v1.0.0.exe" -Algorithm SHA256 |
-            ForEach-Object { "$($_.Hash)  RoleWeaver-Setup-v1.0.0.exe" } |
+          $installer = "RoleWeaver-Setup-v$env:ROLEWEAVER_VERSION.exe"
+          $portable = "RoleWeaver-Portable-v$env:ROLEWEAVER_VERSION.zip"
+          Get-FileHash "release\$installer" -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash)  $installer" } |
             Set-Content "release\SHA256SUMS.txt"
-          Get-FileHash "release\RoleWeaver-Portable-v1.0.0.zip" -Algorithm SHA256 |
-            ForEach-Object { "$($_.Hash)  RoleWeaver-Portable-v1.0.0.zip" } |
+          Get-FileHash "release\$portable" -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash)  $portable" } |
+            Add-Content "release\SHA256SUMS.txt"
+          $nexus = "RoleWeaver-Nexus-v$env:ROLEWEAVER_VERSION.zip"
+          Get-FileHash "release\$nexus" -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash)  $nexus" } |
             Add-Content "release\SHA256SUMS.txt"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: RoleWeaver-Windows-v1.0.0
+          name: RoleWeaver-Windows-v${{ env.ROLEWEAVER_VERSION }}
           path: |
-            release/RoleWeaver-Setup-v1.0.0.exe
-            release/RoleWeaver-Portable-v1.0.0.zip
+            release/RoleWeaver-Setup-v${{ env.ROLEWEAVER_VERSION }}.exe
+            release/RoleWeaver-Portable-v${{ env.ROLEWEAVER_VERSION }}.zip
+            release/RoleWeaver-Nexus-v${{ env.ROLEWEAVER_VERSION }}.zip
             release/SHA256SUMS.txt
           if-no-files-found: error
 
@@ -72,7 +93,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          prerelease: ${{ contains(env.ROLEWEAVER_VERSION, 'alpha') || contains(env.ROLEWEAVER_VERSION, 'beta') }}
           files: |
-            release/RoleWeaver-Setup-v1.0.0.exe
-            release/RoleWeaver-Portable-v1.0.0.zip
+            release/RoleWeaver-Setup-v${{ env.ROLEWEAVER_VERSION }}.exe
+            release/RoleWeaver-Portable-v${{ env.ROLEWEAVER_VERSION }}.zip
+            release/RoleWeaver-Nexus-v${{ env.ROLEWEAVER_VERSION }}.zip
             release/SHA256SUMS.txt

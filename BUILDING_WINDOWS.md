@@ -12,19 +12,19 @@ The repository contains `.github/workflows/windows-release.yml`.
 2. Select **Actions**.
 3. Select **Build Windows Release**.
 4. Choose **Run workflow**.
-5. When the job completes, download the `RoleWeaver-Windows-v1.0.0` artifact.
+5. When the job completes, download the `RoleWeaver-Windows-v1.1.0` artifact.
 
 The artifact contains:
 
-- `RoleWeaver-Setup-v1.0.0.exe` — normal Windows installer.
-- `RoleWeaver-Portable-v1.0.0.zip` — portable version.
+- `RoleWeaver-Setup-v1.1.0.exe` — normal Windows installer.
+- `RoleWeaver-Portable-v1.1.0.zip` — portable version.
 
 ### Publish a public release
 
 Create and push a version tag such as:
 
 ```text
-v1.0.0
+v1.1.0
 ```
 
 The same workflow builds the Windows application and attaches both downloads to a GitHub Release automatically.

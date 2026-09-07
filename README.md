@@ -1,102 +1,77 @@
 # Role Weaver
 
-**AI-assisted roleplay for Neverwinter Nights: Enhanced Edition — for players and Dungeon Masters.**
+> ## Testers wanted
+> **Role Weaver v1.2.0-alpha6.1 is an active public test release.** Players and Dungeon Masters are invited to test it on Neverwinter Nights: Enhanced Edition persistent worlds and report bugs, confusing behavior, memory mistakes, and feature suggestions. Questions and feedback are welcome at **roleweaverinfo@gmail.com** or through GitHub Issues.
 
-Role Weaver watches the Neverwinter Nights client log, builds roleplay context, and helps generate character-consistent dialogue and emotes. It is designed around one principle:
+**AI-assisted persistent character and campaign continuity for Neverwinter Nights: Enhanced Edition — for players and Dungeon Masters.**
+
+Role Weaver watches the NWN client log, builds roleplay context, and helps generate character-consistent dialogue and emotes. It combines editable AI-assisted replies with persistent character memory, continuity, relationships, character development, NPC briefings, and DM campaign-management tools.
 
 > **The human owns the character; Role Weaver helps preserve the story.**
 
-You decide what your character or NPC says. Role Weaver provides memory, context, lore, and editable drafts to make long-running roleplay easier to maintain.
-
 ## Download for Windows
 
-Go to the repository's **Releases** page:
+Use the latest release on the Role Weaver GitHub Releases page. For most users, download **`RoleWeaver-Setup-v1.2.0-alpha6.1.exe`**. A portable build, **`RoleWeaver-Portable-v1.2.0-alpha6.1.zip`**, is also provided.
 
-https://github.com/RoleWeaver/roleweaver/releases
+Python is not required for either packaged Windows build. Early unsigned releases may trigger Microsoft SmartScreen.
 
-For most users, download:
+## First-time setup
 
-**`RoleWeaver-Setup-v1.0.0.exe`**
-
-The installer contains the application and its Python dependencies. Python is **not** required on the user's computer.
-
-A portable build is also available:
-
-**`RoleWeaver-Portable-v1.0.0.zip`**
-
-Extract the entire portable folder before running `RoleWeaver.exe`.
-
-> Early unsigned Windows releases may trigger Microsoft SmartScreen. Code signing is planned as the project matures.
-
-## What Role Weaver does
-
-### For players
-- Generates in-character dialogue and short emotes from recent NWN conversation.
-- Maintains a character profile covering personality, speaking style, background, beliefs, relationships, goals, secrets, and roleplay rules.
-- Provides multiple candidate replies with **F8**.
-- Generates and pastes an editable, unsent reply into NWN with **F9**.
-- Supports persistent Guidance so you can steer the current scene without changing the character profile.
-- Tracks durable memories and relationships across sessions.
-
-### For Dungeon Masters
-- Uses the same character system for NPCs.
-- Helps keep recurring NPC voices, motivations, knowledge, and relationships consistent.
-- Supports server-specific lore and response rules.
-- Makes it practical to maintain many conversational NPCs without surrendering DM control.
-
-### Context and continuity
-- Persistent character memory.
-- Rolling session summaries.
-- Relationship/attitude records.
-- Separate private Tell context.
-- IC/OOC filtering.
-- Manual context controls.
-- Conversation history.
-- AI Context inspection so you can see what roleplay material was supplied for a reply.
-
-### AI providers
-Role Weaver currently supports:
-- **Google Gemini**
-- **OpenAI**
-- **LM Studio** for local/offline-capable models
-
-API keys are not included with Role Weaver. Hosted providers may charge for API usage according to their own pricing.
-
-## Supported server profiles
-
-Role Weaver includes profiles for:
-- Custom / Other NWN Server
-- The Dragon's Neck
-- Arelith
-- Ravenloft: Prisoners of the Mist
-- Cormyr and the Dalelands
-- Star Wars: Legends of the Old Republic
-- Haze: Saltborne
-
-The parser is built around standard NWN client-log chat, so additional servers can be added.
-
-Server profiles scope character files, lore, and response rules independently.
-
-## Quick start
-
-1. Install Role Weaver.
-2. Launch it.
-3. Select **Google Gemini**, **OpenAI**, or **LM Studio**.
-4. Enter an API key when the selected hosted provider requires one.
+1. Install Role Weaver or extract the entire portable ZIP.
+2. Launch Role Weaver.
+3. Choose **Google Gemini**, **OpenAI**, or **LM Studio**.
+4. For Gemini or OpenAI, create your own API key using the instructions below and paste it into Role Weaver.
 5. Press **Test AI Connection**.
 6. Create or select a character profile.
-7. Select the appropriate NWN server profile.
-8. Confirm the NWN client-log path.
-9. Press **Start**.
-10. Enter Neverwinter Nights and roleplay.
+7. Select your NWN server profile and confirm the client-log path.
+8. Press **Start**, enter NWN, and roleplay.
 
-Detailed setup: [`FIRST_RUN.md`](FIRST_RUN.md)
+### Google Gemini API key
 
-AI setup: [`AI_PROVIDER_SETUP.md`](AI_PROVIDER_SETUP.md)
+1. Open **Google AI Studio** and sign in.
+2. Open the **API Keys** page.
+3. Choose **Create API key** if you do not already have one.
+4. Copy the newly created key.
+5. In Role Weaver, select **Google Gemini** as the provider.
+6. Paste the key into the API Key field.
+7. Press **Test AI Connection**.
 
-Player guide: [`PLAYER_GUIDE.md`](PLAYER_GUIDE.md)
+New Gemini keys created in AI Studio use Google's current authorization-key system. Never post or share the key.
 
-DM guide: [`DM_GUIDE.md`](DM_GUIDE.md)
+Official Gemini setup: https://ai.google.dev/gemini-api/docs/get-started
+
+### OpenAI API key
+
+1. Sign in to the **OpenAI API Platform**.
+2. Open the API-key area and create a new secret API key.
+3. Copy the key when it is shown and store it securely.
+4. Make sure your API account has billing/credits configured if required for the model you choose. ChatGPT subscriptions and API billing are separate.
+5. In Role Weaver, select **OpenAI** as the provider.
+6. Paste the key into the API Key field.
+7. Select an available model and press **Test AI Connection**.
+
+Official OpenAI quickstart: https://platform.openai.com/docs/quickstart
+
+For more detail, including LM Studio, see **AI_PROVIDER_SETUP.md**.
+
+## Highlights
+
+### Players
+- Character-consistent dialogue and emotes from recent NWN conversation.
+- F8 multiple candidate replies and F9 editable, unsent paste into NWN.
+- Persistent character memory, relationships, emotional continuity, knowledge and story threads.
+- Learned voice based on IC dialogue actually sent through NWN.
+- Correction learning and player-approved Character Development.
+- Guidance for steering a scene without rewriting the character profile.
+- Visible AI Context so you can inspect what roleplay material was supplied.
+
+### Dungeon Masters
+- Persistent NPC profiles and memories that can survive handoff between DMs.
+- NPC Briefings covering current state, relationships, knowledge, commitments and recent continuity.
+- Campaign Briefings for quickly returning to an ongoing campaign.
+- Campaign Manager with description, current situation, storyline/story beats, objectives, important locations, player/party DM notes and session log.
+- DM-only campaign notes kept out of character-generation context.
+- Tracking of important information an NPC has previously shared with particular players.
 
 ## Main controls
 
@@ -109,64 +84,32 @@ DM guide: [`DM_GUIDE.md`](DM_GUIDE.md)
 | **F11** | Clear current conversation context |
 | **F12** | Stop Role Weaver |
 
-For F9, wait for generation to finish, then click/focus NWN during the two-second countdown. Role Weaver opens the NWN chat entry and pastes the reply, but deliberately leaves the final Enter to you.
+F9 deliberately leaves the final Enter to the player/DM so the reply can be reviewed and edited in NWN.
 
-## Character, lore, and server rules
+## Supported server profiles
 
-Character profiles are stored under:
+Role Weaver includes profiles for Custom/Other, The Dragon's Neck, Arelith, Ravenloft: Prisoners of the Mist, Cormyr and the Dalelands, Star Wars: Legends of the Old Republic, and Haze: Saltborne. The parser is based on standard NWN client-log chat, so additional servers can be added.
 
-```text
-Characters/<server>/
-```
+## Documentation
 
-Server lore is stored under:
+- **FIRST_RUN.md** — first-run setup
+- **AI_PROVIDER_SETUP.md** — Gemini, OpenAI and LM Studio setup
+- **PLAYER_GUIDE.md** — player workflow
+- **DM_GUIDE.md** — NPC continuity and campaign tools
+- **CHARACTER_PROFILE_GUIDE.md** — character profiles
+- **INSTALLATION.md** — source installation
+- **BUILDING_WINDOWS.md** — Windows builds and releases
 
-```text
-Lore/<server>/
-```
+## Privacy and API keys
 
-Response rules are stored under:
+Role Weaver reads the NWN client log you configure. When using a hosted provider, relevant roleplay context is sent to that provider to generate a response. LM Studio can instead use a locally hosted model.
 
-```text
-RoleplayRules/<server>/roleplay_rules.txt
-```
+**Never commit, upload, screenshot, or send your Gemini/OpenAI API key to anyone.** Role Weaver does not ship with API keys. If a key is exposed, revoke it with the provider and create a new one.
 
-Role Weaver includes built-in editors for character profiles and lore.
+## Feedback and support
 
-Runtime memory and conversation history are kept out of source control.
+This is a test release and feedback is particularly valuable. Contact **roleweaverinfo@gmail.com** with questions, bug reports, testing results, or suggestions. GitHub Issues are also welcome.
 
-## Privacy
+## License and disclaimer
 
-Role Weaver reads the NWN client log you configure and can send selected roleplay context to the AI provider you choose.
-
-If you use a hosted AI provider, relevant prompt/context data is transmitted to that provider to generate the response. Review that provider's privacy and data policies before using it with sensitive roleplay.
-
-LM Studio can be used with locally hosted models.
-
-Never commit or post API keys, private Tells, personal logs, or private character data.
-
-## Building from source
-
-See [`INSTALLATION.md`](INSTALLATION.md) for Python/source installation.
-
-See [`BUILDING_WINDOWS.md`](BUILDING_WINDOWS.md) for the PyInstaller + Inno Setup Windows build and GitHub Actions release process.
-
-## Contributing and support
-
-Bug reports and feature requests are welcome:
-
-https://github.com/RoleWeaver/roleweaver/issues
-
-Please read [`CONTRIBUTING.md`](CONTRIBUTING.md) before submitting code and [`SECURITY.md`](SECURITY.md) before reporting sensitive problems.
-
-## License
-
-Role Weaver is released under the [MIT License](LICENSE).
-
-## Disclaimer
-
-Role Weaver is an independent community project. It is not affiliated with or endorsed by Beamdog, BioWare, Wizards of the Coast, OpenAI, Google, or the operators of any supported persistent-world server.
-
-Neverwinter Nights and related names and trademarks belong to their respective owners.
-
-AI-generated content can be inaccurate. Players and Dungeon Masters remain responsible for reviewing and sending roleplay generated with Role Weaver.
+Role Weaver is released under the MIT License. It is an independent community project and is not affiliated with or endorsed by Beamdog, BioWare, Wizards of the Coast, OpenAI, Google, Nexus Mods, or the operators of any supported persistent-world server. Neverwinter Nights and related names and trademarks belong to their respective owners.

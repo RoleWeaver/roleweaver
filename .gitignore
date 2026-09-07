@@ -25,3 +25,6 @@ dist/
 *.spec
 release/
 *.exe
+
+# Runtime/shared campaign state (may contain DM-private information)
+Campaigns/*/*/campaign_memory.json

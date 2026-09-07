@@ -125,3 +125,6 @@ The most reliable hierarchy is:
 6. AI-generated interpretation.
 
 If a generated answer conflicts with higher-level canon, edit the draft and fix the relevant memory or lore source.
+
+## Campaign Manager
+Open **DM Cast > Campaign Manager** to maintain the campaign notebook. Story Beats are DM planning information only; completing or activating a beat does not make an NPC or player character know it. The NPC Roster can open an NPC Briefing directly by double-clicking the NPC or pressing **NPC Briefing**.

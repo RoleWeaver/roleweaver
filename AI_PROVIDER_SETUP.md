@@ -1,90 +1,76 @@
 # AI Provider Setup
 
-After installing Role Weaver, **setting up an AI provider is the first configuration step**. Role Weaver needs a Large Language Model (LLM) to generate replies. You only need one provider.
+> **Need help?** Testers and new users can contact **roleweaverinfo@gmail.com** with setup questions or feedback.
 
-## Quick recommendation
+Role Weaver needs one AI provider. It supports **Google Gemini**, **OpenAI**, and **LM Studio**. Role Weaver does not include an API key; hosted-provider keys belong to the user and must be kept private.
 
-| Provider | Cost | Setup | Typical RP quality | Best reason to choose it |
-| --- | --- | --- | --- | --- |
-| Google Gemini | Free tier available | Easy | Very good | Start without buying API credit |
-| OpenAI / GPT-5.6 Luna | Low-cost API | Easy | Very good | Fast, inexpensive hosted model |
-| LM Studio | No per-message API fee | Moderate | Depends heavily on model/hardware | Run the LLM locally |
+## Google Gemini
 
-For most new users: start with **Gemini** if you want a free option; use **OpenAI GPT-5.6 Luna** if you want an inexpensive hosted option; try **LM Studio** if you specifically want local inference.
-
-## Google Gemini — free-tier starting option
-
-Google's Gemini API has a **free tier** for supported models, with lower quotas/rate limits than paid tiers.
-
-1. Open Google AI Studio: https://aistudio.google.com/
+### Create the key
+1. Go to Google AI Studio: https://aistudio.google.com/
 2. Sign in with your Google account.
-3. Open the API Keys page.
-4. New users may already have a project/key. Otherwise choose **Create API key**.
-5. Copy the key.
-6. In Role Weaver choose **Google Gemini** and paste the key.
-7. Press **Test AI Connection**.
+3. Open **API Keys**.
+4. If a usable key is not already present, choose **Create API key** and follow the project/key dialog.
+5. Copy the new key. New keys created in AI Studio use Google's current authorization-key system.
 
-Official getting-started guide: https://ai.google.dev/gemini-api/docs/get-started
+### Install the key in Role Weaver
+1. Launch Role Weaver.
+2. In **AI Provider**, select **Google Gemini**.
+3. Paste the key into the **API Key** field.
+4. Choose a model if desired, or leave the application's recommended/default selection.
+5. Press **Test AI Connection**.
+6. If the test succeeds, continue with your character setup.
 
-The free tier is an excellent way to start Role Weaver without paying. Its limits are more restrictive, however. During busy periods you may encounter rate/capacity limits, retries, or slower availability. Role Weaver includes Gemini fallback behavior to help when a configured model is temporarily unavailable. Google also offers paid Gemini tiers with higher limits.
+Official Google documentation:
+- https://ai.google.dev/gemini-api/docs/get-started
+- https://ai.google.dev/gemini-api/docs/api-key
 
-## OpenAI — inexpensive hosted option
+Google may offer free and paid usage tiers depending on the model and account. Quotas, billing and model availability can change, so use Google's current documentation rather than relying on old screenshots or model lists.
 
-OpenAI API billing is separate from a ChatGPT subscription. Having ChatGPT Plus or Pro does not itself provide prepaid API usage.
+## OpenAI
 
-1. Open the OpenAI API Platform: https://platform.openai.com/
-2. Sign in or create an account.
-3. Create a secret API key and copy it when shown.
-4. Open API Billing and add a payment method.
-5. Purchase API credit.
-6. In Role Weaver choose **OpenAI**, paste the key, select a model, and press **Test AI Connection**.
+**Important:** ChatGPT subscriptions and OpenAI API billing are separate. A ChatGPT Plus/Pro subscription does not itself provide Role Weaver with API credit.
 
-API overview: https://openai.com/api/
+### Create the key
+1. Go to the OpenAI API Platform: https://platform.openai.com/
+2. Sign in or create an API Platform account.
+3. Open the API-key area and create a new **secret API key**.
+4. Copy the key when it is displayed and store it securely.
+5. Configure API billing/credits if required for the model and account you intend to use.
 
-API key help: https://help.openai.com/en/articles/4936850-where-do-i-find-my-openai-api-key
+### Install the key in Role Weaver
+1. Launch Role Weaver.
+2. In **AI Provider**, select **OpenAI**.
+3. Paste the secret key into the **API Key** field.
+4. Select an OpenAI model available to your API account.
+5. Press **Test AI Connection**.
+6. If the test succeeds, continue with your character setup.
 
-### Suggested starting credit and model
+Official OpenAI quickstart:
+- https://platform.openai.com/docs/quickstart
 
-A practical starting amount is **about US$10**. OpenAI currently allows prepaid API purchases beginning at US$5, with US$10 as the default initial purchase amount. Review the auto-recharge option if you do not want automatic top-ups.
+Model availability and API prices change. Role Weaver documentation intentionally does not promise a particular current model or price; check the OpenAI API Platform for current options.
 
-Prepaid billing help: https://help.openai.com/en/articles/8264644-what-is-prepaid-billi
+## LM Studio — local models
 
-**GPT-5.6 Luna** is a good starting model for Role Weaver because it is a lower-cost GPT-5.6 model and Role Weaver usually generates relatively short conversational output. At the time this guide was prepared, OpenAI listed GPT-5.6 Luna at $0.20 per million input tokens and $1.20 per million output tokens. Prices/model availability can change, so check the current API page.
+LM Studio can run an LLM on your own computer and expose a local OpenAI-compatible server to Role Weaver.
 
-For ordinary Role Weaver use, $10 should provide a substantial amount of dialogue generation, but actual usage depends on context size, candidate generation, summaries, response length, and frequency.
+1. Install LM Studio from https://lmstudio.ai/
+2. Download and load a model suitable for your hardware.
+3. Start LM Studio's local API server.
+4. In Role Weaver select **LM Studio**.
+5. Confirm the local server address and model selection.
+6. Press **Test AI Connection**.
 
-## LM Studio — run the LLM locally
+Local model quality depends strongly on the model and computer. Hosted Gemini/OpenAI models may be more capable for long context, subtle character voice and complex continuity, while LM Studio offers local processing and no per-request hosted API charge.
 
-LM Studio lets Role Weaver use an LLM running **on your own computer** rather than an online provider.
+## API-key safety
 
-Download: https://lmstudio.ai/download
+Treat API keys like passwords:
+- Never include them in character profiles, campaign files or lore.
+- Never commit them to GitHub.
+- Never post them in Discord, forums, Nexus Mods, screenshots or bug reports.
+- Do not email your key to Role Weaver support.
+- If a key is exposed, revoke/delete it with the provider and create a replacement.
 
-Documentation: https://lmstudio.ai/docs/app
-
-1. Install LM Studio for Windows.
-2. Find and download an LLM in LM Studio.
-3. Load the model.
-4. Start LM Studio's local API server.
-5. In Role Weaver choose **LM Studio**.
-6. Leave Model on `auto` initially or select the model reported by LM Studio.
-7. Confirm the local server address and press **Test AI Connection**.
-
-LM Studio can serve local models through OpenAI-compatible endpoints that Role Weaver can use.
-
-### Local-model quality trade-off
-
-A local model does **not** automatically match the quality of large hosted Gemini/OpenAI models. Small and medium local models can work well for straightforward RP, but may be less consistent at distinctive voice, complicated Guidance, long histories, subtle relationships, knowledge boundaries, and varied candidate replies.
-
-Very large local models can improve results, but require substantially more RAM/VRAM, storage, and computing power. On many ordinary PCs, a hosted Gemini or OpenAI model will therefore produce better RP than the local model that comfortably fits the machine.
-
-LM Studio is especially attractive if you value local processing, have powerful hardware, want to experiment with open models, or want to avoid per-request API charges.
-
-## API key safety
-
-**Never share your Gemini or OpenAI API key.** Do not put it in a character profile, Lore file, GitHub repository, Discord message, screenshot, forum post, or bug report. If a key is exposed, revoke it and create a new one.
-
-## Next step
-
-Once **Test AI Connection** succeeds, do **not** press Start yet. Your next step is to create your character description.
-
-Continue with **CHARACTER_PROFILE_GUIDE.md**.
+After **Test AI Connection** succeeds, continue with **CHARACTER_PROFILE_GUIDE.md** and **FIRST_RUN.md**.

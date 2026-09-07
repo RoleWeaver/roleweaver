@@ -113,3 +113,8 @@ Lore\
 For different servers or campaigns, keep separate profiles so the same character name does not accidentally inherit the wrong setting or continuity.
 
 **Your character remains yours. Role Weaver helps you remember who they have become.**
+
+## Adaptive Characters
+The **Adaptive** tab contains Correction Learning and Character Development. Correction Learning compares an AI-authored draft with the final edited version that actually appears in the NWN log and gradually learns recurring style preferences. A one-off edit should not redefine the character.
+
+Character Development is approval-based. Role Weaver may propose a durable change when repeated IC portrayal suggests the character has genuinely evolved, but the proposal has no effect until you press **Approve Selected**. You may reject a proposal or later remove an approval. The original character profile remains authoritative and is not rewritten automatically.
