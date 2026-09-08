@@ -10,6 +10,6 @@ Alpha6 focuses on practical continuity for DMs portraying persistent NPCs.
 - DM-only campaign notes remain outside character AI context.
 
 ## Included test scenario
-TDN includes a synthetic campaign named **DM Continuity Demo** with Brother Aldren and Nessa Quickstep. Their synthetic memories exercise the Longest Year / missing children / slums / warehouse scenario, including relationships, knowledge provenance, commitments, active threads, and prior disclosures to players.
+The development package included a synthetic **DM Continuity Demo** with example NPC memories exercising relationships, knowledge provenance, commitments, active threads, and prior disclosures to players.
 
 The demo data is fictional test data and can be deleted after testing.

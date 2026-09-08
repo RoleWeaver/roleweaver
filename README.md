@@ -1,8 +1,5 @@
 # Role Weaver
 
-> ## Testers wanted
-> **Role Weaver v1.2.0-alpha6.1 is an active public test release.** Players and Dungeon Masters are invited to test it on Neverwinter Nights: Enhanced Edition persistent worlds and report bugs, confusing behavior, memory mistakes, and feature suggestions. Questions and feedback are welcome at **roleweaverinfo@gmail.com** or through GitHub Issues.
-
 **AI-assisted persistent character and campaign continuity for Neverwinter Nights: Enhanced Edition — for players and Dungeon Masters.**
 
 Role Weaver watches the NWN client log, builds roleplay context, and helps generate character-consistent dialogue and emotes. It combines editable AI-assisted replies with persistent character memory, continuity, relationships, character development, NPC briefings, and DM campaign-management tools.
@@ -11,7 +8,7 @@ Role Weaver watches the NWN client log, builds roleplay context, and helps gener
 
 ## Download for Windows
 
-Use the latest release on the Role Weaver GitHub Releases page. For most users, download **`RoleWeaver-Setup-v1.2.0-alpha6.1.exe`**. A portable build, **`RoleWeaver-Portable-v1.2.0-alpha6.1.zip`**, is also provided.
+Use the latest release on the Role Weaver GitHub Releases page. For most users, download **`RoleWeaver-Setup-v1.2.1.exe`**. A portable build, **`RoleWeaver-Portable-v1.2.1.zip`**, is also provided.
 
 Python is not required for either packaged Windows build. Early unsigned releases may trigger Microsoft SmartScreen.
 
@@ -23,8 +20,9 @@ Python is not required for either packaged Windows build. Early unsigned release
 4. For Gemini or OpenAI, create your own API key using the instructions below and paste it into Role Weaver.
 5. Press **Test AI Connection**.
 6. Create or select a character profile.
-7. Select your NWN server profile and confirm the client-log path.
-8. Press **Start**, enter NWN, and roleplay.
+7. Leave **World / Server** on **Auto Detect**. Role Weaver follows the normal NWN client log automatically; use **Browse...** only when you intentionally want to choose a different log file.
+8. Role Weaver discovers a local world profile and log format when possible.
+9. Press **Start**, enter NWN, and roleplay.
 
 ### Google Gemini API key
 
@@ -86,6 +84,14 @@ For more detail, including LM Studio, see **AI_PROVIDER_SETUP.md**.
 
 F9 deliberately leaves the final Enter to the player/DM so the reply can be reviewed and edited in NWN.
 
+## Automatic world and log detection
+
+Role Weaver v1.2.1 does not ship with a named persistent-world compatibility list. It discovers worlds from the NWN client logs already present on the user's computer and stores those profiles locally.
+
+The parser also adapts to several NWN chat-log layouts. When both `[CHAT WINDOW TEXT]` and a structured copy of the same message are present, Role Weaver prefers the structured record to avoid duplicate conversation context. Use **Rescan Logs** to refresh locally discovered worlds. **Browse...** can point Role Weaver at a different NWN client log; if the log identifies a world, that world is then added to the list.
+
+See **AUTOMATIC_LOG_DETECTION.md** for the automatic detection and adaptive-parser details.
+
 ## Documentation
 
 - **FIRST_RUN.md** — first-run setup
@@ -104,8 +110,8 @@ Role Weaver reads the NWN client log you configure. When using a hosted provider
 
 ## Feedback and support
 
-This is a test release and feedback is particularly valuable. Contact **roleweaverinfo@gmail.com** with questions, bug reports, testing results, or suggestions. GitHub Issues are also welcome.
+Contact **roleweaverinfo@gmail.com** with questions, bug reports, testing results, or suggestions. GitHub Issues are also welcome.
 
 ## License and disclaimer
 
-Role Weaver is released under the MIT License. It is an independent community project and is not affiliated with or endorsed by Beamdog, BioWare, Wizards of the Coast, OpenAI, Google, Nexus Mods, or the operators of any supported persistent-world server. Neverwinter Nights and related names and trademarks belong to their respective owners.
+Role Weaver is released under the MIT License. It is an independent community project and is not affiliated with or endorsed by Beamdog, BioWare, Wizards of the Coast, OpenAI, Google, Nexus Mods, or the operators of persistent-world servers. Neverwinter Nights and related names and trademarks belong to their respective owners.

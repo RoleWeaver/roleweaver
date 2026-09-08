@@ -33,7 +33,7 @@ Avoid writing the entire campaign encyclopedia into a character profile. Put wor
 A practical pattern is:
 
 ```text
-Characters    CUSTOM        character_Captain_Veyra.txt
+Characters    AUTO          character_Example_NPC.txt
         character_Archivist_Meran.txt
 Lore    City_of_Asterfall.txt
     Royal_Court.txt
@@ -42,13 +42,13 @@ Lore    City_of_Asterfall.txt
 
 Store those shared files in your private campaign Git repository.
 
-When another DM needs to portray Captain Veyra, they use the same profile and lore. That creates a common characterization baseline while allowing the current DM to add scene-specific Guidance.
+When another DM needs to portray Example NPC, they use the same profile and lore. That creates a common characterization baseline while allowing the current DM to add scene-specific Guidance.
 
 ### Suggested DM workflow
 
 Before a scene, review the NPC's relationship/memory entry and relevant lore. Put any temporary direction in Guidance, for example:
 
-> Veyra suspects the party is lying. Remain courteous, but do not reveal that she already spoke to the magistrate.
+> the NPC suspects the party is lying. Remain courteous, but do not reveal that she already spoke to the magistrate.
 
 During the scene, use F8 when you want several alternatives and F9 when speed matters. Review the AI Context tab whenever a response feels surprising.
 
@@ -82,7 +82,7 @@ Good:
 
 ```text
 Lore\Temple_of_the_Dawn.txt
-Lore\House_Veyran.txt
+Lore\Example_Faction.txt
 Lore\Red_Market_Incident.txt
 ```
 

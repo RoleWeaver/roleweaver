@@ -15,12 +15,11 @@ This test build begins the Character Intelligence stage while retaining the iden
 ## Additional Example Profiles
 
 Each server profile now includes additional generic examples:
-- Mira Vale — Player
-- Brother Aldren — NPC
-- Nessa Quickstep — NPC
+- Generic Player example
+- Generic NPC examples
 
-The Dragon's Neck also includes:
-- Lora Thendry — Player, based on the supplied Lora profile.
+The development package also included:
+- An additional supplied Player profile used during development.
 
 ## Important alpha limitations
 

@@ -7,29 +7,29 @@ After configuring your AI provider, **the next thing every Role Weaver user shou
 Role Weaver includes:
 
 ```text
-character_Kaelen_Marr_Player_Character.txt
-character_Captain_Veyra_DM_NPC.txt
+character_Example_Player.txt
+character_Example_NPC.txt
 ```
 
-Kaelen Marr demonstrates a **player-character** profile. Captain Veyra demonstrates a **DM NPC** profile intended to remain recognizable across sessions and potentially across several DMs.
+Example Player demonstrates a **player-character** profile. Example NPC demonstrates a **DM NPC** profile intended to remain recognizable across sessions and potentially across several DMs.
 
 You can copy and edit an example manually, or use Role Weaver's **New Character...** button to open the structured Character Editor. The editor saves the profile into the currently selected server folder.
 
 ## Where profiles go
 
-Profiles are separated by server:
+Before a world is detected, Role Weaver provides generic examples under:
 
 ```text
-Characters\CUSTOM\
-Characters\TDN\
-Characters\Arelith\
-Characters\RAVENLOFT_POTM\
-Characters\CORMYR_DALELANDS\
-Characters\STAR_WARS_LOR\
-Characters\HAZE_SALTBORNE\
+Characters\AUTO\
 ```
 
-For another/general NWN server, use `CUSTOM`.
+When Role Weaver detects a world from the user's own NWN client log, it creates a local world-specific folder automatically, for example:
+
+```text
+Characters\WORLD_<detected-name>\
+```
+
+The generic Player and NPC examples are copied into newly detected world folders so they can be loaded and edited immediately. Role Weaver does not ship with named persistent-world profiles.
 
 ## What to describe
 

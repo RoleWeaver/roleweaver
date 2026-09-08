@@ -1,6 +1,6 @@
 #define MyAppName "Role Weaver"
 #ifndef MyAppVersion
-#define MyAppVersion "1.2.0-alpha6.1"
+#define MyAppVersion "1.2.1"
 #endif
 #define MyAppPublisher "RoleWeaver"
 #define MyAppURL "https://github.com/RoleWeaver/roleweaver"

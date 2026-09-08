@@ -2,7 +2,7 @@
 
 Role Weaver is an AI-assisted roleplay client for **Neverwinter Nights: Enhanced Edition**, designed for both players and Dungeon Masters.
 
-The first public release focuses on keeping the human in control while giving long-running roleplay better continuity. Role Weaver can read NWN chat from the client log, maintain character context and relationships, use server-specific lore and response rules, generate editable replies, and paste those replies back into NWN.
+The first public release focuses on keeping the human in control while giving long-running roleplay better continuity. Role Weaver can read NWN chat from the client log, maintain character context and relationships, use world-specific lore and response rules, generate editable replies, and paste those replies back into NWN.
 
 ## Recommended download
 
@@ -20,7 +20,7 @@ A portable ZIP is also provided for users who prefer not to install the applicat
 - Persistent memory, session summaries, and relationship tracking
 - Private Tell context
 - IC/OOC filtering
-- Server-specific lore and response rules
+- World-specific lore and response rules
 - Conversation history and AI Context inspection
 - Built-in Character and Lore editors
 - Support profiles for several popular NWN persistent worlds
@@ -39,6 +39,6 @@ See `FIRST_RUN.md` and `AI_PROVIDER_SETUP.md` for more detail.
 
 ## Important
 
-Role Weaver is an independent community project and is not affiliated with or endorsed by Beamdog, BioWare, Wizards of the Coast, OpenAI, Google, or the operators of the supported persistent-world servers.
+Role Weaver is an independent community project and is not affiliated with or endorsed by Beamdog, BioWare, Wizards of the Coast, OpenAI, Google, or the operators of persistent-world servers.
 
 AI-generated dialogue can be wrong or inappropriate for your character. Review generated text before sending it when accuracy matters. The human player or DM remains responsible for what becomes part of the roleplay.

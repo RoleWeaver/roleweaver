@@ -7,7 +7,6 @@ Role Weaver - AI Roleplay and Persistent Character Continuity
 AI-assisted roleplay companion for Neverwinter Nights: Enhanced Edition with editable dialogue, persistent character/NPC memory, continuity, relationships, NPC briefings and DM campaign management.
 
 ## Tester notice (place first)
-**TESTERS WANTED:** Role Weaver v1.2.0-alpha6.1 is an active test release. Players and DMs are invited to report bugs, confusing behavior and suggestions. Questions and feedback: **roleweaverinfo@gmail.com**.
 
 ## Suggested description
 Role Weaver is a Windows companion utility for Neverwinter Nights: Enhanced Edition. It reads the NWN client log, builds roleplay context, and uses the AI provider selected by the user to produce editable character-consistent dialogue and emotes.
@@ -47,7 +46,7 @@ Role Weaver's core function uses generative AI for dialogue generation. Apply Ne
 
 ## Recommended file
 Upload the GitHub Actions artifact named:
-`RoleWeaver-Nexus-v1.2.0-alpha6.1.zip`
+`RoleWeaver-Nexus-v1.2.1.zip`
 
 The Nexus archive should contain the unpacked portable application plus `NEXUSMODS_README.txt`. Do not put another ZIP/archive inside it.
 

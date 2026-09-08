@@ -6,7 +6,10 @@ $Work = Join-Path $env:TEMP "roleweaver-publish-$Version"
 if (Test-Path $Work) { Remove-Item $Work -Recurse -Force }
 git clone $Repo $Work
 
-# Copy this prepared distribution tree over the clean clone while preserving .git.
+# Replace the repository working tree with this prepared distribution while preserving .git.
+# Removing the old working tree first ensures obsolete sample logs, named-world folders,
+# and superseded documentation are deleted from GitHub rather than left behind.
+Get-ChildItem $Work -Force | Where-Object { $_.Name -ne '.git' } | Remove-Item -Recurse -Force
 Get-ChildItem $PSScriptRoot -Force | Where-Object { $_.Name -ne '.git' } | ForEach-Object {
     Copy-Item $_.FullName -Destination $Work -Recurse -Force
 }
@@ -15,7 +18,7 @@ Push-Location $Work
 try {
     git add -A
     git status
-    git commit -m "Release v$Version - Campaign Manager"
+    git commit -m "Release v$Version - Automatic Server and Log Detection"
     git push origin main
     git tag "v$Version"
     git push origin "v$Version"

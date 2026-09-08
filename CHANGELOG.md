@@ -1,16 +1,25 @@
+## v1.2.1 — Automatic Server & Log Detection
+
+- Removed the bundled named persistent-world server list from new distributions.
+- Added local automatic world discovery from NWN client logs and a **Rescan Logs** control.
+- Added adaptive chat-log format detection with structured-record preference to avoid duplicate context.
+- Added generic area-entry recognition and dynamic world-scoped Characters, Lore, Campaigns, RoleplayRules, and memory folders.
+- Preserved the currently selected legacy world profile during upgrade without shipping a legacy server catalog.
+- Replaced named-server example folders with generic `AUTO` examples.
+
 ## v1.2.0-alpha6.1 — Campaign Manager
 - Added campaign description and Current Situation fields.
 - Added ordered Story Beats with status and completion tracking.
 - Added Objectives, Locations, Player/Party DM Notes, and Session Log.
 - Added direct NPC Briefing access from the campaign roster.
 - Expanded Campaign Briefing to summarize campaign-management data.
-- Expanded the TDN DM Continuity Demo campaign for testing.
+- Expanded the synthetic DM Continuity Demo campaign for testing.
 
 ## v1.2.0-alpha6 — DM Continuity
 
 - Added NPC Briefing and Campaign Briefing.
 - Added character-owned shared-with-player disclosure memory.
-- Added synthetic TDN DM Continuity Demo campaign and NPC memories for testing.
+- Added a synthetic DM Continuity Demo campaign and NPC memories for testing.
 - No DM writes to Player Knowledge and no NPC-to-NPC knowledge transfer.
 
 # Changelog
@@ -48,7 +57,7 @@
 - Legacy string knowledge entries are migrated into structured records automatically.
 - Manual entries are authoritative and are protected from being silently overwritten by automatic summarization.
 - DM_ONLY entries remain excluded from character AI context.
-- Included Lora Thendry as a TDN Player profile using the supplied character description and RP rules.
+- Included a supplied Player profile example using the provided character description and RP rules.
 - Preserved the tested alpha1.4 identity/chat fixes and alpha2 Character Intelligence behavior.
 
 ## v1.2.0-alpha2 — Character Intelligence
@@ -57,8 +66,8 @@
 - Added structured character knowledge learned from IC context.
 - Added privacy labels and hard exclusion of DM-only knowledge from character AI context.
 - Added Character Memory display for emotional state and knowledge.
-- Added Mira Vale (Player), Brother Aldren (NPC), and Nessa Quickstep (NPC) examples to server profile folders.
-- Added Lora Thendry as a TDN Player profile based on the supplied character profile.
+- Added generic Player and NPC examples to server profile folders.
+- Added a supplied Player profile example based on the provided character profile.
 - Preserved the alpha1.4 identity and chat-parser hotfixes.
 
 ## 1.2.0-alpha1.3
@@ -142,10 +151,10 @@ All notable public changes to Role Weaver are documented here.
 - AI Context view showing the roleplay material used for generation.
 
 ### World support
-- Server-specific character profiles.
-- Server-specific lore folders and lore editor.
-- Server-specific response rules.
-- Included profiles for Custom/Other, The Dragon's Neck, Arelith, Ravenloft: Prisoners of the Mist, Cormyr and the Dalelands, Star Wars: Legends of the Old Republic, and Haze: Saltborne.
+- World-specific character profiles.
+- World-specific lore folders and lore editor.
+- World-specific response rules.
+- Earlier development builds included several named persistent-world profiles. v1.2.1 removes all named world profiles in favor of local automatic detection.
 
 ### AI providers
 - Google Gemini.

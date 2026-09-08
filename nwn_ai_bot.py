@@ -15,6 +15,7 @@ import urllib.request
 import urllib.error
 import uuid
 import difflib
+import shutil
 
 import pyautogui
 import pyperclip
@@ -35,7 +36,7 @@ COLOR_TAG_RE = re.compile(r"</?c[^>]*>", re.IGNORECASE)
 CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 # Matches examples such as:
-# [fMlNM2u] Lora Thendry: [Talk] <c   >"Hello."</c>
+# [speaker-id] Example Character: [Talk] <c   >"Hello."</c>
 # [rHfBdZh] <c...>Bookish Rascal</c>: [Talk] <c...>"Hello."</c>
 # Scrivener of the Vaunted Word: [Talk] "We live and learn."
 STRUCTURED_CHAT_RE = re.compile(
@@ -46,37 +47,27 @@ STRUCTURED_CHAT_RE = re.compile(
     re.IGNORECASE,
 )
 
-TDN_AREA_RE = re.compile(r"\*Now Entering (?P<area>.+?)\*\s*$")
-RAVENLOFT_AREA_RE = re.compile(
-    r"<<\s*You have entered the area:\s*(?P<area>.+?)\.?\s*>>",
-    re.IGNORECASE,
-)
+GENERIC_AREA_PATTERNS = [
+    re.compile(r"\*Now Entering (?P<area>.+?)\*\s*$", re.IGNORECASE),
+    re.compile(r"<<\s*You have entered the area:\s*(?P<area>.+?)\.?\s*>>", re.IGNORECASE),
+]
 
-DEFAULT_NWN_LOG_PATH = str(
-    Path.home() / "Documents" / "Neverwinter Nights" / "logs" / "nwclientLog1.txt"
-)
+DEFAULT_NWN_LOG_DIR = Path.home() / "Documents" / "Neverwinter Nights" / "logs"
+DEFAULT_NWN_LOG_PATH = str(DEFAULT_NWN_LOG_DIR / "nwclientLog1.txt")
 
+# v1.2.1 intentionally ships without named persistent-world profiles. Worlds are
+# discovered locally from the player's own NWN logs and stored only in settings.
 SERVER_PROFILES = {
-    "CUSTOM": {"display_name": "Custom / Other NWN Server", "default_log_path": DEFAULT_NWN_LOG_PATH},
-    "TDN": {"display_name": "The Dragon's Neck (TDN)", "default_log_path": DEFAULT_NWN_LOG_PATH},
-    "Arelith": {"display_name": "Arelith", "default_log_path": DEFAULT_NWN_LOG_PATH},
-    "RAVENLOFT_POTM": {"display_name": "Ravenloft: Prisoners of the Mist", "default_log_path": DEFAULT_NWN_LOG_PATH},
-    "CORMYR_DALELANDS": {"display_name": "Cormyr and the Dalelands", "default_log_path": DEFAULT_NWN_LOG_PATH},
-    "STAR_WARS_LOR": {"display_name": "Star Wars: Legends of the Old Republic", "default_log_path": DEFAULT_NWN_LOG_PATH},
-    "HAZE_SALTBORNE": {"display_name": "Haze: Saltborne", "default_log_path": DEFAULT_NWN_LOG_PATH},
+    "AUTO": {"display_name": "Auto Detect", "default_log_path": DEFAULT_NWN_LOG_PATH},
 }
 
 DEFAULT_SETTINGS = {
-    "server_profile": "CUSTOM",
+    "server_profile": "AUTO",
     "server_log_paths": {
-        "CUSTOM": SERVER_PROFILES["CUSTOM"]["default_log_path"],
-        "TDN": SERVER_PROFILES["TDN"]["default_log_path"],
-        "Arelith": SERVER_PROFILES["Arelith"]["default_log_path"],
-        "RAVENLOFT_POTM": SERVER_PROFILES["RAVENLOFT_POTM"]["default_log_path"],
-        "CORMYR_DALELANDS": SERVER_PROFILES["CORMYR_DALELANDS"]["default_log_path"],
-        "STAR_WARS_LOR": SERVER_PROFILES["STAR_WARS_LOR"]["default_log_path"],
-        "HAZE_SALTBORNE": SERVER_PROFILES["HAZE_SALTBORNE"]["default_log_path"],
+        "AUTO": DEFAULT_NWN_LOG_PATH,
     },
+    "discovered_servers": {},
+    "parser_profile": "adaptive",
     "log_path": DEFAULT_NWN_LOG_PATH,
     "character_name": "Example NPC",
     "ai_provider": "Google Gemini",
@@ -114,26 +105,191 @@ DEFAULT_SETTINGS = {
 }
 
 
+def _safe_server_id(label):
+    text = re.sub(r"[^A-Za-z0-9_. -]+", "_", str(label or "World")).strip(" ._")
+    text = re.sub(r"\s+", "_", text)
+    return (text[:64] or "World")
+
+
+def server_display_name(settings, server_profile=None):
+    profile = server_profile or settings.get("server_profile", "AUTO")
+    if profile in SERVER_PROFILES:
+        return SERVER_PROFILES[profile]["display_name"]
+    discovered = settings.get("discovered_servers", {}) or {}
+    item = discovered.get(profile, {}) if isinstance(discovered, dict) else {}
+    return str(item.get("display_name") or profile or "Detected World")
+
+
+def discover_nwn_log_files(settings=None, max_files=20):
+    """Return likely NWN client logs, newest first, without contacting any server."""
+    candidates = []
+    seen = set()
+    configured = []
+    if settings:
+        configured.append(settings.get("log_path", ""))
+        configured.extend((settings.get("server_log_paths", {}) or {}).values())
+    for raw in configured:
+        if not raw:
+            continue
+        p = Path(raw).expanduser()
+        if p.is_file() and str(p).casefold() not in seen:
+            seen.add(str(p).casefold())
+            candidates.append(p)
+    if DEFAULT_NWN_LOG_DIR.exists():
+        for pattern in ("nwclientLog*.txt", "*.txt"):
+            for p in DEFAULT_NWN_LOG_DIR.glob(pattern):
+                key = str(p).casefold()
+                if p.is_file() and key not in seen:
+                    seen.add(key)
+                    candidates.append(p)
+    candidates.sort(key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True)
+    return candidates[:max_files]
+
+
+def _read_log_tail(path, max_bytes=300000):
+    """Read enough of a log for identity + format detection without loading huge files.
+
+    The beginning preserves login/welcome text while the tail preserves the current
+    area and recent chat format.
+    """
+    p = Path(path)
+    if not p.exists() or not p.is_file():
+        return ""
+    try:
+        size = p.stat().st_size
+        with p.open("rb") as f:
+            if size <= max_bytes * 2:
+                data = f.read()
+            else:
+                head = f.read(max_bytes)
+                f.seek(-max_bytes, os.SEEK_END)
+                f.readline()
+                tail = f.read()
+                data = head + b"\n" + tail
+        return data.decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+
+
+def _strip_chat_window_prefix(line):
+    return re.sub(
+        r"^\[CHAT WINDOW TEXT\]\s*(?:\[[^\]]+\]\s*)?",
+        "",
+        str(line or "").strip(),
+        flags=re.IGNORECASE,
+    )
+
+
+def detect_world_from_log(log_path):
+    """Infer a local display label and parser format from a log file.
+
+    Detection is deliberately generic: no public server-name database or bundled
+    persistent-world list is used. Explicit 'Welcome to ...' text wins; otherwise
+    an area-root label is used as a conservative fallback.
+    """
+    text = _read_log_tail(log_path)
+    if not text:
+        return None
+    lines = text.splitlines()
+    explicit = []
+    onboarding = []
+    area_roots = []
+    for index, line in enumerate(lines):
+        cleaned = clean_nwn_text(_strip_chat_window_prefix(line))
+        if not cleaned:
+            continue
+        m = re.search(r"\bWelcome\s+to\s+(.+?)(?:!|\.{2,}|$)", cleaned, re.IGNORECASE)
+        if m:
+            label = m.group(1).strip(" .!-\t")
+            label = re.sub(r"\s+-\s+https?://\S+.*$", "", label, flags=re.IGNORECASE).strip()
+            lower = cleaned.casefold()
+            systemish = (cleaned.casefold().startswith("welcome to ") or "journal has been updated. welcome" in lower)
+            if systemish and 2 <= len(label) <= 90:
+                explicit.append(label)
+            # Many PWs announce themselves through an onboarding NPC. The first
+            # such greeting near login is a useful generic signal; later tavern or
+            # shop greetings are deliberately ignored.
+            elif (
+                index < 350
+                and 2 <= len(label) <= 90
+                and '"' not in label
+                and ". " not in label
+                and ", " not in label
+            ):
+                onboarding.append(label)
+        for pattern in GENERIC_AREA_PATTERNS:
+            am = pattern.search(cleaned)
+            if am:
+                area = am.group("area").strip().rstrip(".")
+                root = re.split(r"\s*[:\-]\s*", area, maxsplit=1)[0].strip()
+                if root and len(root) <= 70:
+                    area_roots.append(root)
+                break
+    label = explicit[0] if explicit else (onboarding[0] if onboarding else (area_roots[-1] if area_roots else ""))
+    fmt = detect_log_format(text)
+    if not label:
+        # Keep identity local and useful without pretending we know the server name.
+        label = Path(log_path).stem or "Detected World"
+    sid = "WORLD_" + _safe_server_id(label)
+    return {
+        "id": sid,
+        "display_name": label,
+        "log_path": str(Path(log_path)),
+        "parser_profile": fmt,
+        "last_seen": datetime.now().isoformat(timespec="seconds"),
+    }
+
+
+def register_discovered_server(settings, detected):
+    if not detected:
+        return settings
+    discovered = dict(settings.get("discovered_servers", {}) or {})
+    sid = detected["id"]
+    existing = dict(discovered.get(sid, {}) or {})
+    existing.update(detected)
+    discovered[sid] = existing
+    settings["discovered_servers"] = discovered
+    paths = dict(settings.get("server_log_paths", {}) or {})
+    paths[sid] = detected["log_path"]
+    settings["server_log_paths"] = paths
+    return settings
+
+
+def refresh_discovered_servers(settings, max_files=20):
+    for path in discover_nwn_log_files(settings, max_files=max_files):
+        detected = detect_world_from_log(path)
+        if detected:
+            register_discovered_server(settings, detected)
+    return settings
+
+
 def load_settings():
     if not SETTINGS_PATH.exists():
-        SETTINGS_PATH.write_text(
-            json.dumps(DEFAULT_SETTINGS, indent=2),
-            encoding="utf-8",
-        )
+        SETTINGS_PATH.write_text(json.dumps(DEFAULT_SETTINGS, indent=2), encoding="utf-8")
     data = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
     merged = dict(DEFAULT_SETTINGS)
     merged.update(data)
     paths = dict(DEFAULT_SETTINGS["server_log_paths"])
-    paths.update(data.get("server_log_paths", {}))
+    paths.update(data.get("server_log_paths", {}) or {})
     if "server_log_paths" not in data and data.get("log_path"):
-        paths["TDN"] = data["log_path"]
+        paths["AUTO"] = data["log_path"]
     merged["server_log_paths"] = paths
-    if merged.get("server_profile") not in SERVER_PROFILES:
-        merged["server_profile"] = "CUSTOM"
-    merged["log_path"] = paths.get(
-        merged["server_profile"],
-        SERVER_PROFILES[merged["server_profile"]]["default_log_path"],
-    )
+    if not isinstance(merged.get("discovered_servers"), dict):
+        merged["discovered_servers"] = {}
+    valid_dynamic = set(merged["discovered_servers"].keys())
+    selected = merged.get("server_profile")
+    if selected not in set(SERVER_PROFILES) | valid_dynamic:
+        # Upgrade path from earlier releases: preserve only the profile the user
+        # actually had selected. No legacy server-name catalog is shipped.
+        legacy_path = paths.get(selected) or data.get("log_path") or DEFAULT_NWN_LOG_PATH
+        merged["discovered_servers"][selected] = {
+            "display_name": str(selected),
+            "log_path": legacy_path,
+            "parser_profile": "adaptive",
+            "last_seen": "",
+        }
+        valid_dynamic.add(selected)
+    merged["log_path"] = get_server_log_path(merged, merged["server_profile"])
     return merged
 
 
@@ -142,9 +298,19 @@ def save_settings(settings):
 
 
 def get_server_log_path(settings, server_profile=None):
-    profile = server_profile or settings.get("server_profile", "CUSTOM")
-    paths = settings.get("server_log_paths", {})
-    return paths.get(profile) or SERVER_PROFILES.get(profile, SERVER_PROFILES["CUSTOM"])["default_log_path"]
+    profile = server_profile or settings.get("server_profile", "AUTO")
+    paths = settings.get("server_log_paths", {}) or {}
+    if paths.get(profile):
+        return paths[profile]
+    discovered = settings.get("discovered_servers", {}) or {}
+    if profile in discovered and discovered[profile].get("log_path"):
+        return discovered[profile]["log_path"]
+    # AUTO follows the newest available NWN client log.
+    if profile == "AUTO":
+        logs = discover_nwn_log_files(settings, max_files=1)
+        if logs:
+            return str(logs[0])
+    return DEFAULT_NWN_LOG_PATH
 
 
 def load_character_prompt():
@@ -160,18 +326,18 @@ def load_character_prompt():
 ROLEPLAY_RULES_DIR = APP_DIR / "RoleplayRules"
 
 
-def roleplay_rules_dir(server_profile="CUSTOM"):
-    profile = server_profile if server_profile in SERVER_PROFILES else "CUSTOM"
+def roleplay_rules_dir(server_profile="AUTO"):
+    profile = _safe_server_id(server_profile or "AUTO")
     path = ROLEPLAY_RULES_DIR / profile
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
-def roleplay_rules_path(server_profile="CUSTOM"):
+def roleplay_rules_path(server_profile="AUTO"):
     return roleplay_rules_dir(server_profile) / "roleplay_rules.txt"
 
 
-def load_server_roleplay_rules(server_profile="CUSTOM"):
+def load_server_roleplay_rules(server_profile="AUTO"):
     path = roleplay_rules_path(server_profile)
     try:
         return path.read_text(encoding="utf-8", errors="replace").strip()
@@ -185,16 +351,44 @@ def clean_nwn_text(text):
     return text.strip()
 
 
-def _parse_standard_structured_chat(raw, character_name, server_profile):
-    """Parse the structured copy of an NWN chat message."""
-    m = STRUCTURED_CHAT_RE.match(raw)
-    if not m:
-        return None
-    speaker = clean_nwn_text(m.group("speaker"))
-    message = clean_nwn_text(m.group("message"))
-    channel = m.group("channel").title()
-    speaker_id = clean_nwn_text((m.group("speaker_id") or "").strip())
+ALT_CHANNEL_FIRST_RE = re.compile(
+    r"^\[(?P<channel>Talk|Whisper|Party|Tell|Shout|DM)\]\s*"
+    r"(?P<speaker>[^:]{1,120}):\s*(?P<message>.*)$",
+    re.IGNORECASE,
+)
+
+ALT_SPEAKER_CHANNEL_RE = re.compile(
+    r"^(?P<speaker>[^\[]+?)\s*\[(?P<channel>Talk|Whisper|Party|Tell|Shout|DM)\]\s*:\s*"
+    r"(?P<message>.*)$",
+    re.IGNORECASE,
+)
+
+CHAT_WINDOW_CHANNEL_RE = re.compile(
+    r"^(?P<speaker>[^:]{1,120}):\s*"
+    r"\[(?P<channel>Talk|Whisper|Party|Tell|Shout|DM)\]\s*"
+    r"(?P<message>.*)$",
+    re.IGNORECASE,
+)
+
+CHAT_WINDOW_PLAIN_RE = re.compile(
+    r"^(?P<speaker>[^:]{1,100}):\s*(?P<message>.+)$",
+    re.IGNORECASE,
+)
+
+GENERIC_SYSTEM_SPEAKERS = {
+    "loading screen", "server", "area setting", "public message board",
+    "system", "combat log", "debug",
+}
+
+
+def _build_chat_event(speaker, message, channel, character_name, server_profile, speaker_id=""):
+    speaker = clean_nwn_text(speaker)
+    message = clean_nwn_text(message)
+    channel = str(channel or "Talk").title()
+    speaker_id = clean_nwn_text(speaker_id)
     if not speaker or not message:
+        return None
+    if speaker.casefold() in GENERIC_SYSTEM_SPEAKERS or "message board" in speaker.casefold():
         return None
     if message.startswith("[") and message.endswith("]"):
         return None
@@ -208,54 +402,122 @@ def _parse_standard_structured_chat(raw, character_name, server_profile):
     }
 
 
-def _parse_custom_chat(raw, character_name, server_profile):
-    return _parse_standard_structured_chat(raw, character_name, server_profile)
+def _parse_standard_structured_chat(raw, character_name, server_profile):
+    """Parse the standard structured copy emitted by NWN:EE."""
+    m = STRUCTURED_CHAT_RE.match(raw)
+    if not m:
+        return None
+    return _build_chat_event(
+        m.group("speaker"), m.group("message"), m.group("channel"),
+        character_name, server_profile, m.group("speaker_id") or "",
+    )
 
 
-def _parse_tdn_chat(raw, character_name, server_profile):
-    return _parse_standard_structured_chat(raw, character_name, server_profile)
+def _looks_like_plain_chat(speaker, message):
+    """Conservative fallback for servers/loggers that omit a channel marker."""
+    sp = clean_nwn_text(speaker)
+    msg = clean_nwn_text(message)
+    if not sp or not msg or len(sp) > 80:
+        return False
+    low = sp.casefold()
+    if low in GENERIC_SYSTEM_SPEAKERS:
+        return False
+    system_prefixes = (
+        "experience points", "acquired item", "lost item", "your journal",
+        "current module", "loading screen", "area setting", "server",
+        "messages for", "the date is", "the time is", "food", "rest", "piety",
+    )
+    if low.startswith(system_prefixes):
+        return False
+    # Names/NPC labels are usually short. This avoids converting long system prose
+    # before a colon into fake speakers.
+    if len(sp.split()) > 8:
+        return False
+    # Plain chat is accepted only when it resembles roleplay/dialogue.
+    lead = msg.lstrip()[:1]
+    return lead in {'"', "'", "*", "[", "("} or len(msg.split()) <= 30
 
 
-def _parse_arelith_chat(raw, character_name, server_profile):
+def _parse_adaptive_chat(raw, character_name, server_profile):
+    # CHAT WINDOW TEXT lines need their timestamp/header removed before any
+    # generic structured pattern is tried; otherwise the header can be mistaken
+    # for a speaker/account identifier.
+    if raw.startswith("[CHAT WINDOW TEXT]"):
+        cleaned = clean_nwn_text(_strip_chat_window_prefix(raw))
+        m = CHAT_WINDOW_CHANNEL_RE.match(cleaned)
+        if m:
+            return _build_chat_event(m.group("speaker"), m.group("message"), m.group("channel"), character_name, server_profile)
+        m = CHAT_WINDOW_PLAIN_RE.match(cleaned)
+        if m and _looks_like_plain_chat(m.group("speaker"), m.group("message")):
+            return _build_chat_event(m.group("speaker"), m.group("message"), "Talk", character_name, server_profile)
+        return None
+
     event = _parse_standard_structured_chat(raw, character_name, server_profile)
-    if event and event["speaker"].casefold() == "public message board":
+    if event:
+        return event
+
+    m = ALT_CHANNEL_FIRST_RE.match(raw)
+    if m:
+        return _build_chat_event(m.group("speaker"), m.group("message"), m.group("channel"), character_name, server_profile)
+
+    m = ALT_SPEAKER_CHANNEL_RE.match(raw)
+    if m:
+        return _build_chat_event(m.group("speaker"), m.group("message"), m.group("channel"), character_name, server_profile)
+
+    return None
+
+
+def detect_log_format(text):
+    """Classify the dominant chat representation for diagnostics/profile caching."""
+    counts = {"structured": 0, "channel_first": 0, "speaker_channel": 0, "chat_window": 0}
+    for raw in str(text or "").splitlines()[-2500:]:
+        line = raw.strip()
+        if not line:
+            continue
+        if STRUCTURED_CHAT_RE.match(line):
+            counts["structured"] += 1
+        elif ALT_CHANNEL_FIRST_RE.match(line):
+            counts["channel_first"] += 1
+        elif ALT_SPEAKER_CHANNEL_RE.match(line):
+            counts["speaker_channel"] += 1
+        elif line.startswith("[CHAT WINDOW TEXT]"):
+            cleaned = clean_nwn_text(_strip_chat_window_prefix(line))
+            if CHAT_WINDOW_CHANNEL_RE.match(cleaned) or CHAT_WINDOW_PLAIN_RE.match(cleaned):
+                counts["chat_window"] += 1
+    # Prefer the machine-readable structured copy whenever it exists. NWN often
+    # writes a human-readable CHAT WINDOW TEXT line immediately before the same
+    # structured message; choosing structured avoids duplicate RP context.
+    for name in ("structured", "channel_first", "speaker_channel", "chat_window"):
+        if counts[name]:
+            return name
+    return "adaptive"
+
+
+def parse_chat_line(line, character_name, server_profile="AUTO", parser_profile="adaptive"):
+    raw = str(line or "").strip()
+    if not raw:
         return None
-    return event
-
-
-def _parse_ravenloft_potm_chat(raw, character_name, server_profile):
-    return _parse_standard_structured_chat(raw, character_name, server_profile)
-
-
-def _parse_cormyr_dalelands_chat(raw, character_name, server_profile):
-    return _parse_standard_structured_chat(raw, character_name, server_profile)
-
-
-def _parse_star_wars_lor_chat(raw, character_name, server_profile):
-    return _parse_standard_structured_chat(raw, character_name, server_profile)
-
-
-def _parse_haze_saltborne_chat(raw, character_name, server_profile):
-    return _parse_standard_structured_chat(raw, character_name, server_profile)
-
-
-SERVER_CHAT_PARSERS = {
-    "CUSTOM": _parse_custom_chat,
-    "TDN": _parse_tdn_chat,
-    "Arelith": _parse_arelith_chat,
-    "RAVENLOFT_POTM": _parse_ravenloft_potm_chat,
-    "CORMYR_DALELANDS": _parse_cormyr_dalelands_chat,
-    "STAR_WARS_LOR": _parse_star_wars_lor_chat,
-    "HAZE_SALTBORNE": _parse_haze_saltborne_chat,
-}
-
-
-def parse_chat_line(line, character_name, server_profile="CUSTOM"):
-    raw = line.strip()
-    if not raw or raw.startswith("[CHAT WINDOW TEXT]"):
-        return None
-    parser = SERVER_CHAT_PARSERS.get(server_profile, SERVER_CHAT_PARSERS["CUSTOM"])
-    return parser(raw, character_name, server_profile)
+    mode = str(parser_profile or "adaptive").casefold()
+    if mode == "structured":
+        if raw.startswith("[CHAT WINDOW TEXT]"):
+            return None
+        return _parse_standard_structured_chat(raw, character_name, server_profile)
+    if mode == "channel_first":
+        if raw.startswith("[CHAT WINDOW TEXT]"):
+            return None
+        m = ALT_CHANNEL_FIRST_RE.match(raw)
+        return _build_chat_event(m.group("speaker"), m.group("message"), m.group("channel"), character_name, server_profile) if m else None
+    if mode == "speaker_channel":
+        if raw.startswith("[CHAT WINDOW TEXT]"):
+            return None
+        m = ALT_SPEAKER_CHANNEL_RE.match(raw)
+        return _build_chat_event(m.group("speaker"), m.group("message"), m.group("channel"), character_name, server_profile) if m else None
+    if mode == "chat_window":
+        if not raw.startswith("[CHAT WINDOW TEXT]"):
+            return None
+        return _parse_adaptive_chat(raw, character_name, server_profile)
+    # Unknown formats remain permissive until a scan learns the local layout.
+    return _parse_adaptive_chat(raw, character_name, server_profile)
 
 
 
@@ -803,14 +1065,27 @@ CHARACTER_PROFILE_PATTERN = "character_*.txt"
 CHARACTERS_DIR = APP_DIR / "Characters"
 
 
-def character_profile_dir(server_profile="TDN"):
-    profile = server_profile if server_profile in SERVER_PROFILES else "CUSTOM"
+def character_profile_dir(server_profile="AUTO"):
+    profile = _safe_server_id(server_profile or "AUTO")
     path = CHARACTERS_DIR / profile
     path.mkdir(parents=True, exist_ok=True)
+
+    # Every newly discovered world starts with the two generic example profiles.
+    # They are local templates only and contain no persistent-world-specific data.
+    if profile != "AUTO":
+        examples = CHARACTERS_DIR / "AUTO"
+        if examples.exists():
+            for source in examples.glob("character_Example_*.txt"):
+                target = path / source.name
+                if not target.exists():
+                    try:
+                        shutil.copy2(source, target)
+                    except Exception:
+                        pass
     return path
 
 
-def list_character_profiles(server_profile="TDN"):
+def list_character_profiles(server_profile="AUTO"):
     """Return character prompts belonging to one server only."""
     base = character_profile_dir(server_profile)
     return sorted(
@@ -1497,13 +1772,13 @@ def sanitize_campaign_id(value):
     value = re.sub(r'[^A-Za-z0-9_. -]+', '_', value).strip(' .')
     return value or "default"
 
-def campaigns_server_dir(server_profile="CUSTOM"):
+def campaigns_server_dir(server_profile="AUTO"):
     server = _safe_filename(server_profile) if "_safe_filename" in globals() else re.sub(r"[^A-Za-z0-9_. -]+", "_", str(server_profile))
     path = CAMPAIGNS_DIR / server
     path.mkdir(parents=True, exist_ok=True)
     return path
 
-def list_campaigns(server_profile="CUSTOM"):
+def list_campaigns(server_profile="AUTO"):
     base = campaigns_server_dir(server_profile)
     result = []
     for path in base.iterdir():
@@ -1533,7 +1808,7 @@ def list_campaigns(server_profile="CUSTOM"):
     return sorted(result, key=lambda x: str(x.get("name") or x.get("id")).casefold())
 
 def campaign_dir(settings, create=True):
-    server = settings.get("server_profile", "CUSTOM")
+    server = settings.get("server_profile", "AUTO")
     campaign = sanitize_campaign_id(settings.get("campaign_id", "default"))
     path = campaigns_server_dir(server) / campaign
     if create:
@@ -1546,7 +1821,7 @@ def campaign_metadata_path(settings):
 def load_campaign_metadata(settings):
     cid = sanitize_campaign_id(settings.get("campaign_id", "default"))
     data = {"schema_version": 2, "id": cid, "name": cid, "description": "", "current_situation": "",
-            "server": settings.get("server_profile", "CUSTOM"), "created": "", "updated": ""}
+            "server": settings.get("server_profile", "AUTO"), "created": "", "updated": ""}
     path = campaign_metadata_path(settings)
     if path.exists():
         try:
@@ -1561,7 +1836,7 @@ def save_campaign_metadata(settings, data):
     current = load_campaign_metadata(settings)
     if isinstance(data, dict): current.update(data)
     current["id"] = sanitize_campaign_id(settings.get("campaign_id", "default"))
-    current["server"] = settings.get("server_profile", "CUSTOM")
+    current["server"] = settings.get("server_profile", "AUTO")
     current["updated"] = datetime.now().isoformat(timespec="seconds")
     current.setdefault("created", current["updated"])
     path.write_text(json.dumps(current, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -1605,7 +1880,7 @@ def load_campaign_memory(settings):
     data = {
         "schema_version": 3,
         "name": sanitize_campaign_id(settings.get("campaign_id", "default")),
-        "server": settings.get("server_profile", "CUSTOM"),
+        "server": settings.get("server_profile", "AUTO"),
         "shared_memory": "", "dm_notes": "", "facts": [],
         "story_beats": [], "objectives": [], "locations": [],
         "player_notes": [], "session_log": [],
@@ -1632,7 +1907,7 @@ def save_campaign_memory(settings, data):
     current = load_campaign_memory(settings)
     if isinstance(data, dict): current.update(data)
     current["schema_version"] = 3
-    current["server"] = settings.get("server_profile", "CUSTOM")
+    current["server"] = settings.get("server_profile", "AUTO")
     current["name"] = sanitize_campaign_id(settings.get("campaign_id", "default"))
     current["updated"] = datetime.now().isoformat(timespec="seconds")
     path.write_text(json.dumps(current, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -1656,7 +1931,7 @@ def _safe_filename(value):
 
 
 def _memory_paths(settings):
-    server = _safe_filename(settings.get("server_profile", "TDN"))
+    server = _safe_filename(settings.get("server_profile", "AUTO"))
     character = _safe_filename(settings.get("character_name", "Unknown"))
     base = ROLEWEAVER_DATA_DIR / server / character
     summaries = base / "session_summaries"
@@ -1684,7 +1959,7 @@ def load_persistent_memory(settings):
     summaries.mkdir(parents=True, exist_ok=True)
 
     data = {
-        "server": settings.get("server_profile", "TDN"),
+        "server": settings.get("server_profile", "AUTO"),
         "player_character": settings.get("character_name", "Unknown"),
         "characters": {},
     }
@@ -1793,15 +2068,15 @@ def extract_json_object(text):
 LORE_DIR = APP_DIR / "Lore"
 
 
-def lore_dir(server_profile="CUSTOM"):
-    """Return the lore folder belonging only to the selected server."""
-    profile = server_profile if server_profile in SERVER_PROFILES else "CUSTOM"
+def lore_dir(server_profile="AUTO"):
+    """Return the lore folder belonging only to the selected local world profile."""
+    profile = _safe_server_id(server_profile or "AUTO")
     path = LORE_DIR / profile
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
-def list_lore_files(server_profile="CUSTOM"):
+def list_lore_files(server_profile="AUTO"):
     return sorted(
         [p for p in lore_dir(server_profile).glob("*.txt") if p.is_file()],
         key=lambda p: p.name.casefold(),
@@ -1812,7 +2087,7 @@ def resolve_lore_file(server_profile, filename):
     return lore_dir(server_profile) / Path(filename).name
 
 
-def load_relevant_lore(context_text, server_profile="CUSTOM", max_files=3, max_characters=5000):
+def load_relevant_lore(context_text, server_profile="AUTO", max_files=3, max_characters=5000):
     """Return relevant lore from the currently selected server only."""
     try:
         files = list_lore_files(server_profile)
@@ -1992,7 +2267,7 @@ class NWNAIBot:
         stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         self.history_path = history_dir / f"{stamp}.txt"
         self.history_path.write_text(
-            f"Role Weaver conversation history\nServer: {settings.get('server_profile','TDN')}\n"
+            f"Role Weaver conversation history\nServer: {server_display_name(settings)}\n"
             f"Character: {settings.get('character_name','Unknown')}\nStarted: {datetime.now().isoformat(timespec='seconds')}\n\n",
             encoding="utf-8",
         )
@@ -2004,16 +2279,13 @@ class NWNAIBot:
     def add_system_event(self, line):
         if not line.startswith("[CHAT WINDOW TEXT]"):
             return
-        profile = self.settings.get("server_profile", "TDN")
+        cleaned = clean_nwn_text(_strip_chat_window_prefix(line))
         area = ""
-        if profile == "TDN":
-            m = TDN_AREA_RE.search(line)
-            if m:
-                area = clean_nwn_text(m.group("area"))
-        elif profile == "RAVENLOFT_POTM":
-            m = RAVENLOFT_AREA_RE.search(line)
+        for pattern in GENERIC_AREA_PATTERNS:
+            m = pattern.search(cleaned)
             if m:
                 area = clean_nwn_text(m.group("area")).rstrip(".")
+                break
         if area and area != self.current_area:
             self.current_area = area
             print(f"[AREA] {area}")
@@ -2960,7 +3232,7 @@ class NWNAIBot:
         )
         lore = load_relevant_lore(
             (self.running_summary or "") + "\n" + recent_for_lore,
-            self.settings.get("server_profile", "CUSTOM"),
+            self.settings.get("server_profile", "AUTO"),
         )
         if lore:
             lines.append("")
@@ -3564,7 +3836,7 @@ class NWNAIBot:
 
         target_characters, length_guidance = self._response_length_target()
         server_rules = load_server_roleplay_rules(
-            self.settings.get("server_profile", "CUSTOM")
+            self.settings.get("server_profile", "AUTO")
         )
         rules_block = (
             "\n\nSERVER RESPONSE RULES (follow these for this server):\n" + server_rules
@@ -3638,7 +3910,7 @@ Aim for a {length_guidance} response and keep it under {target_characters} chara
 
         target_characters, length_guidance = self._response_length_target()
         server_rules = load_server_roleplay_rules(
-            self.settings.get("server_profile", "CUSTOM")
+            self.settings.get("server_profile", "AUTO")
         )
         rules_block = (
             "\n\nSERVER RESPONSE RULES (follow these for this server):\n" + server_rules
@@ -4032,7 +4304,8 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
                 event = parse_chat_line(
                     line,
                     self.settings["character_name"],
-                    self.settings.get("server_profile", "CUSTOM"),
+                    self.settings.get("server_profile", "AUTO"),
+                    self.settings.get("parser_profile", "adaptive"),
                 )
                 if not event:
                     continue

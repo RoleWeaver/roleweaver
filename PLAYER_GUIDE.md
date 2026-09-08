@@ -22,7 +22,7 @@ Useful sections include:
 - **Secrets** — things the character knows but should not casually reveal.
 - **Roleplay Rules** — boundaries on what the AI should invent or control.
 
-The included `character_Kaelen_Marr_Player_Character.txt` is a starting example.
+The included `character_Example_Player.txt` is a starting example.
 
 ## During play
 
@@ -50,11 +50,11 @@ Guidance remains active until you clear or replace it. For a player, this is use
 Examples:
 
 ```text
-Kaelen is exhausted and unusually impatient tonight. Keep replies shorter and less playful.
+the player character is exhausted and unusually impatient tonight. Keep replies shorter and less playful.
 ```
 
 ```text
-He trusts Mira, but is still hiding what happened at the ruins. Be warm without revealing the secret.
+The character trusts a longtime companion, but is still hiding what happened at the ruins. Be warm without revealing the secret.
 ```
 
 ```text
@@ -103,11 +103,11 @@ Other players should still feel that they are roleplaying with **you**.
 
 ```text
 Characters\
-    CUSTOM\
-        character_Kaelen_Marr_Player_Character.txt
+    AUTO\
+        character_Example_Player.txt
 Lore\
     City_of_Asterfall.txt
-    Kaelen_Known_History.txt
+    Example_Player_Known_History.txt
 ```
 
 For different servers or campaigns, keep separate profiles so the same character name does not accidentally inherit the wrong setting or continuity.

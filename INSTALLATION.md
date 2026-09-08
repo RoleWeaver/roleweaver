@@ -78,24 +78,18 @@ A short Role Weaver splash screen should appear, followed by the main client.
 
 Open the **Server / Log** settings and select the appropriate server profile.
 
-For a normal NWN server that does not have custom parsing rules, choose:
-
-```text
-Custom / Other NWN Server
-```
-
 Character profiles live in:
 
 ```text
 Characters\<server>\
 ```
 
-The release candidate includes two profile examples: `character_Kaelen_Marr_Player_Character.txt` for a player's own character and `character_Captain_Veyra_DM_NPC.txt` for a recurring DM-controlled NPC. Copy the example closest to your use case and rename the copy.
+The stable distribution includes two generic profile examples: `character_Example_Player.txt` for a player's own character and `character_Example_NPC.txt` for a recurring DM-controlled NPC. Copy the example closest to your use case and rename the copy.
 
 Example:
 
 ```text
-Characters\CUSTOM\character_Captain_Veyra.txt
+Characters\AUTO\character_Example_NPC.txt
 ```
 
 Edit the profile in a text editor. Keep a clear `Character Name:` or `Name:` line so Role Weaver can identify the character. Players should describe the voice, beliefs, background, goals, and boundaries of their own character. DMs can use the same structure for recurring NPCs.
@@ -129,7 +123,7 @@ Good examples include:
 ```text
 Lore\Kingdom_of_Asterfall.txt
 Lore\Cult_of_the_Black_Sun.txt
-Lore\Captain_Veyra_Background.txt
+Lore\Captain_the NPC_Background.txt
 ```
 
 Keep files focused. Role Weaver retrieves a few references that appear relevant to the current conversation.
@@ -240,7 +234,13 @@ After installation, the program itself works the same way for both.
 
 **If you are a DM:** select the NPC you are currently portraying. Start with `DM_GUIDE.md`.
 
-You can keep many player characters and NPCs in the same installation. Server-specific folders keep campaign profiles separated.
+You can keep many player characters and NPCs in the same installation. World-specific folders keep campaign profiles separated.
+
+
+## Automatic world and log detection
+
+The **World / Server** menu begins with only **Auto Detect**. Detected worlds are added locally after Role Weaver scans or opens the user's own NWN client logs. Each detected world receives its own local character, lore, campaign, and continuity scope. See `AUTOMATIC_LOG_DETECTION.md` for detection and adaptive-parser details.
+
 
 ## Character and lore editing
 

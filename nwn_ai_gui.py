@@ -331,7 +331,7 @@ class NWNAIApp:
 
         ttk.Label(
             character_frame,
-            text="Profiles are server-specific under Characters/<server>/. Character name is read from Name: or Character Name:.",
+            text="Profiles are stored locally for each detected world. Generic Player and NPC examples are available when a world is first discovered.",
             wraplength=310,
         ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(5, 0))
         character_frame.columnconfigure(0, weight=1)
@@ -339,7 +339,7 @@ class NWNAIApp:
         # Server / log profile
         server_frame = ttk.LabelFrame(settings_panel_host, text="Server and Log", padding=8)
         self._settings_frames["Server / Log"] = server_frame
-        ttk.Label(server_frame, text="Server:").grid(row=0, column=0, sticky="w")
+        ttk.Label(server_frame, text="World:").grid(row=0, column=0, sticky="w")
         self.server_var = tk.StringVar()
         self.server_combo = ttk.Combobox(
             server_frame, textvariable=self.server_var, state="readonly",
@@ -357,15 +357,19 @@ class NWNAIApp:
         self.log_path_entry.grid(
             row=2, column=0, columnspan=2, sticky="ew", pady=(5, 0)
         )
-        self.browse_btn = ttk.Button(server_frame, text="Browse...", command=self._browse_log_file)
-        self.browse_btn.grid(row=3, column=0, sticky="w", pady=(7, 0))
+        button_row = ttk.Frame(server_frame)
+        button_row.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(7, 0))
+        self.browse_btn = ttk.Button(button_row, text="Browse...", command=self._browse_log_file)
+        self.browse_btn.pack(side="left")
+        self.rescan_logs_btn = ttk.Button(button_row, text="Rescan Logs", command=self._rescan_server_logs)
+        self.rescan_logs_btn.pack(side="left", padx=(6, 0))
         self.lore_editor_btn = ttk.Button(
-            server_frame, text="Lore Editor...", command=self._open_lore_editor
+            button_row, text="Lore Editor...", command=self._open_lore_editor
         )
-        self.lore_editor_btn.grid(row=3, column=1, sticky="e", pady=(7, 0))
+        self.lore_editor_btn.pack(side="right")
         ttk.Label(
             server_frame,
-            text="Lore is isolated by server under Lore/<server>/.",
+            text="Starts with Auto Detect only. Worlds appear here after they are discovered from your own NWN logs.",
             wraplength=310,
         ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(6, 0))
         server_frame.columnconfigure(1, weight=1)
@@ -415,7 +419,7 @@ class NWNAIApp:
         self.test_ai_btn.grid(row=4, column=0, columnspan=2, sticky="w", pady=(8, 0))
         ttk.Label(
             ai_frame,
-            text="Provider, model and response length are saved per server-specific character profile.",
+            text="Provider, model and response length are saved per world-specific character profile.",
             wraplength=310,
         ).grid(row=5, column=0, columnspan=4, sticky="w", pady=(6, 0))
         ai_frame.columnconfigure(3, weight=1)
@@ -1075,9 +1079,22 @@ class NWNAIApp:
 
     def _load_initial_values(self):
         # Server must be selected before scanning character profiles because
-        # profiles now live in server-specific folders.
-        profile = self.settings.get("server_profile", "CUSTOM")
-        self.server_var.set(core.SERVER_PROFILES[profile]["display_name"])
+        # profiles now live in world-specific folders.
+        self.settings = core.refresh_discovered_servers(self.settings)
+        profile = self.settings.get("server_profile", "AUTO")
+        # When AUTO has a recognizable current log, use the discovered local world
+        # immediately so character/lore/campaign data remain isolated by world.
+        if profile == "AUTO":
+            auto_path = core.get_server_log_path(self.settings, "AUTO")
+            detected = core.detect_world_from_log(auto_path)
+            if detected:
+                core.register_discovered_server(self.settings, detected)
+                profile = detected["id"]
+                self.settings["server_profile"] = profile
+                self.settings["log_path"] = detected["log_path"]
+        core.save_settings(self.settings)
+        self._refresh_server_combo(select_profile=profile)
+        self.server_var.set(core.server_display_name(self.settings, profile))
         self.log_path_var.set(core.get_server_log_path(self.settings, profile))
 
         # Loading a profile also restores that character's AI/model/length settings.
@@ -1118,7 +1135,7 @@ class NWNAIApp:
         self._append_log("UI ready. Click Start to begin watching the NWN log.")
 
     def _refresh_character_profiles(self, initial=False):
-        profile = self._selected_server_profile() if hasattr(self, "server_var") else self.settings.get("server_profile", "CUSTOM")
+        profile = self._selected_server_profile() if hasattr(self, "server_var") else self.settings.get("server_profile", "AUTO")
         profiles = core.list_character_profiles(profile)
         names = [p.name for p in profiles]
         self.character_profile_combo["values"] = names
@@ -1174,7 +1191,7 @@ class NWNAIApp:
 
         outer = ttk.Frame(win, padding=10)
         outer.pack(fill="both", expand=True)
-        ttk.Label(outer, text=f"Server: {core.SERVER_PROFILES[profile]['display_name']}",
+        ttk.Label(outer, text=f"World / Server: {core.server_display_name(self.settings, profile)}",
                   font=("Segoe UI", 10, "bold")).pack(anchor="w")
 
         file_row = ttk.Frame(outer)
@@ -1294,7 +1311,7 @@ class NWNAIApp:
 
         outer = ttk.Frame(win, padding=10)
         outer.pack(fill="both", expand=True)
-        ttk.Label(outer, text=f"Lore for: {core.SERVER_PROFILES[profile]['display_name']}",
+        ttk.Label(outer, text=f"Lore for: {core.server_display_name(self.settings, profile)}",
                   font=("Segoe UI", 10, "bold")).pack(anchor="w")
         ttk.Label(outer, text="Only lore in this server folder is used while this server is selected.").pack(anchor="w", pady=(3, 8))
 
@@ -1350,7 +1367,7 @@ class NWNAIApp:
             file_var.set(filename)
             refresh_files(filename)
             self._append_log(f"[LORE] Saved {profile}/{filename}")
-            messagebox.showinfo("Lore saved", f"Saved {filename} for {core.SERVER_PROFILES[profile]['display_name']}.", parent=win)
+            messagebox.showinfo("Lore saved", f"Saved {filename} for {core.server_display_name(self.settings, profile)}.", parent=win)
 
         existing_combo.bind("<<ComboboxSelected>>", load_selected)
         row = ttk.Frame(outer)
@@ -2087,49 +2104,110 @@ class NWNAIApp:
             return "keep"
         return "cancel"
 
+    def _server_profile_items(self):
+        items = [(key, value["display_name"]) for key, value in core.SERVER_PROFILES.items()]
+        discovered = self.settings.get("discovered_servers", {}) or {}
+        for key, value in sorted(discovered.items(), key=lambda kv: str(kv[1].get("display_name", kv[0])).casefold()):
+            name = str(value.get("display_name") or key)
+            if not any(existing_key == key for existing_key, _ in items):
+                items.append((key, name))
+        return items
+
+    def _refresh_server_combo(self, select_profile=None):
+        items = self._server_profile_items()
+        self.server_combo["values"] = [name for _, name in items]
+        profile = select_profile or self.settings.get("server_profile", "AUTO")
+        self.server_var.set(core.server_display_name(self.settings, profile))
+
     def _selected_server_profile(self):
         selected = self.server_var.get() if hasattr(self, "server_var") else ""
-        for key, profile in core.SERVER_PROFILES.items():
-            if profile["display_name"] == selected:
+        for key, name in self._server_profile_items():
+            if name == selected:
                 return key
-        return self.settings.get("server_profile", "CUSTOM")
+        return self.settings.get("server_profile", "AUTO")
 
     def _on_server_changed(self, event=None):
         if self.running:
             return
         profile = self._selected_server_profile()
-        self.settings = core.load_settings()
-        self.settings["server_profile"] = profile
-        self.log_path_var.set(core.get_server_log_path(self.settings, profile))
-        core.save_settings(self.settings)
+        current = core.load_settings()
+        current["server_profile"] = profile
+        current["log_path"] = core.get_server_log_path(current, profile)
+        core.save_settings(current)
+        self.settings = current
+        self.log_path_var.set(current["log_path"])
         self._refresh_character_profiles(initial=False)
         self._refresh_campaigns(select="default")
         self._refresh_dm_cast()
         self._append_log(
-            f"[SERVER] Selected {core.SERVER_PROFILES[profile]['display_name']}; "
-            "character, lore, and response-rule scope updated."
+            f"[WORLD] Selected {core.server_display_name(self.settings, profile)}; "
+            "character, lore, campaign, and memory scope updated."
         )
+
+    def _rescan_server_logs(self):
+        if self.running:
+            return
+        self.settings = core.refresh_discovered_servers(core.load_settings())
+        selected = self.settings.get("server_profile", "AUTO")
+        core.save_settings(self.settings)
+        self._refresh_server_combo(select_profile=selected)
+        count = len(self.settings.get("discovered_servers", {}) or {})
+        self._append_log(f"[WORLD] Log scan complete: {count} local world profile(s) available.")
 
     def _browse_log_file(self):
         filename = filedialog.askopenfilename(
             title="Select Neverwinter Nights client log",
             filetypes=[("Text logs", "*.txt"), ("All files", "*.*")],
         )
-        if filename:
-            self.log_path_var.set(filename)
+        if not filename:
+            return
+        self.log_path_var.set(filename)
+        self.settings = core.load_settings()
+        detected = core.detect_world_from_log(filename)
+        if detected:
+            core.register_discovered_server(self.settings, detected)
+            profile = detected["id"]
+            self.settings["server_profile"] = profile
+            self.settings["log_path"] = filename
+            core.save_settings(self.settings)
+            self._refresh_server_combo(select_profile=profile)
+            self.server_var.set(core.server_display_name(self.settings, profile))
+            self._refresh_character_profiles(initial=False)
+            self._refresh_campaigns(select="default")
+            self._refresh_dm_cast()
+            self._append_log(
+                f"[WORLD] Detected {detected['display_name']} from the selected log "
+                f"(format: {detected.get('parser_profile', 'adaptive')})."
+            )
 
     def _apply_server_settings(self):
         profile = self._selected_server_profile()
         path = self.log_path_var.get().strip()
         if not path:
-            path = core.SERVER_PROFILES[profile]["default_log_path"]
+            path = core.get_server_log_path(self.settings, profile)
             self.log_path_var.set(path)
         settings = core.load_settings()
-        paths = dict(settings.get("server_log_paths", {}))
+        # Re-detect the selected log at Start. This lets AUTO follow a different
+        # server/log without requiring a bundled compatibility entry.
+        detected = core.detect_world_from_log(path)
+        if detected and profile == "AUTO":
+            core.register_discovered_server(settings, detected)
+            profile = detected["id"]
+            settings["server_profile"] = profile
+            self.settings = settings
+            self._refresh_server_combo(select_profile=profile)
+            self.server_var.set(core.server_display_name(settings, profile))
+        paths = dict(settings.get("server_log_paths", {}) or {})
         paths[profile] = path
         settings["server_profile"] = profile
         settings["server_log_paths"] = paths
         settings["log_path"] = path
+        if detected:
+            core.register_discovered_server(settings, detected)
+            settings["parser_profile"] = detected.get("parser_profile", "adaptive")
+        else:
+            item = (settings.get("discovered_servers", {}) or {}).get(profile, {})
+            settings["parser_profile"] = item.get("parser_profile", settings.get("parser_profile", "adaptive"))
         core.save_settings(settings)
         self.settings = settings
         return profile, path
@@ -2329,7 +2407,7 @@ class NWNAIApp:
             if not character_name or character_name in ("Unknown", "Profile error", "No profile found"):
                 messagebox.showerror(
                     "Character name not found",
-                    "The selected character profile must contain a line like 'Name: Lora Thendry' or 'Character Name: Lora Thendry'.",
+                    "The selected character profile must contain a line like 'Name: Example Character' or 'Character Name: Example Character'.",
                 )
                 return
 
@@ -2380,14 +2458,15 @@ class NWNAIApp:
             self.server_combo.configure(state="disabled")
             self.log_path_entry.configure(state="disabled")
             self.browse_btn.configure(state="disabled")
+            self.rescan_logs_btn.configure(state="disabled")
             self._append_log(f"[START] AI: {provider} / {self.settings['model']}")
-            self._append_log(f"[START] Server: {core.SERVER_PROFILES[profile]['display_name']}")
+            self._append_log(f"[START] World / Server: {core.server_display_name(self.settings, profile)}")
             self._append_log(f"[START] Watching: {self.settings['log_path']}")
             memory_base, _, _, _ = core._memory_paths(self.settings)
             self._append_log(f"[MEMORY] Persistent RP memory: {memory_base}")
-            core.LORE_DIR.mkdir(parents=True, exist_ok=True)
-            lore_count = len(list(core.LORE_DIR.glob("*.txt")))
-            self._append_log(f"[LORE] Reference folder: {core.LORE_DIR} ({lore_count} .txt file(s))")
+            lore_path = core.lore_dir(profile)
+            lore_count = len(list(lore_path.glob("*.txt")))
+            self._append_log(f"[LORE] Reference folder: {lore_path} ({lore_count} .txt file(s))")
             self._append_log(f"[HISTORY] Saving conversation to: {self.bot.history_path}")
             self._append_log("[TELL] Private Tell conversations use separate AI context threads.")
             self._append_log("[IC/OOC] Explicit OOC lines are excluded from AI reply context by default.")
@@ -2420,7 +2499,8 @@ class NWNAIApp:
                 event = core.parse_chat_line(
                     line,
                     self.settings["character_name"],
-                    self.settings.get("server_profile", "CUSTOM"),
+                    self.settings.get("server_profile", "AUTO"),
+                    self.settings.get("parser_profile", "adaptive"),
                 )
                 if not event:
                     continue
@@ -2470,6 +2550,7 @@ class NWNAIApp:
         self.server_combo.configure(state="readonly")
         self.log_path_entry.configure(state="normal")
         self.browse_btn.configure(state="normal")
+        self.rescan_logs_btn.configure(state="normal")
         self.status_var.set("Stopped")
 
     def _set_running_controls(self, running):
@@ -3184,6 +3265,7 @@ class NWNAIApp:
                         self.server_combo.configure(state="readonly")
                         self.log_path_entry.configure(state="normal")
                         self.browse_btn.configure(state="normal")
+                        self.rescan_logs_btn.configure(state="normal")
                         self.status_var.set("Stopped")
                     continue
                 self._append_log(line)

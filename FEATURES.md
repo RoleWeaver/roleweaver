@@ -50,7 +50,7 @@ Role Weaver is a **Neverwinter Nights roleplay client for both players and Dunge
 
 ## Profiles and AI providers
 
-- **Server-specific character profiles** — maintain different versions/settings for different servers or campaigns.
+- **World-specific character profiles** — maintain different versions/settings for different servers or campaigns.
 - **Character-specific AI settings** — provider, model, LM Studio URL, response-length preference, and candidate count can be stored per profile.
 - **OpenAI, Google Gemini, and LM Studio support**.
 - **Gemini fallback logic** for configured alternate models.
@@ -75,7 +75,7 @@ Lore\
 
 Those files are suitable for a private campaign Git repository.
 
-Runtime memory and history are local in the current release candidate. Role Weaver does **not** yet provide automatic multi-user/cloud synchronization of live memories.
+Runtime memory and history are local in the current release. Role Weaver does **not** yet provide automatic multi-user/cloud synchronization of live memories.
 
 Whether you are running the world or simply living in it, the design principle is the same:
 
@@ -86,11 +86,11 @@ Whether you are running the world or simply living in it, the design principle i
 
 Role Weaver includes a popup **Character Editor** with separate fields for character name, profile type, personality, speaking style, background, beliefs, relationships, goals, secrets/knowledge boundaries, and roleplay rules. Profiles are saved directly into the currently selected server's `Characters/<server>/` folder.
 
-The **Lore Editor** lets users create, paste, load, edit, and save lore without leaving Role Weaver. Lore is strictly server-specific under `Lore/<server>/`; selecting one server never retrieves lore from another server.
+The **Lore Editor** lets users create, paste, load, edit, and save lore without leaving Role Weaver. Lore is strictly world-specific under `Lore/<server>/`; selecting one server never retrieves lore from another server.
 
 ## Server response rules
 
-Each supported server has a `RoleplayRules/<server>/roleplay_rules.txt` file. The selected server's response rules are appended to the LLM instructions for every reply, allowing formatting and RP constraints to vary by persistent world.
+Each detected world can have a `RoleplayRules/<server>/roleplay_rules.txt` file. The selected server's response rules are appended to the LLM instructions for every reply, allowing formatting and RP constraints to vary by persistent world.
 
 
 ### Relationship tab behavior

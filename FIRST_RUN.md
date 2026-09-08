@@ -15,15 +15,17 @@ Players create a profile for their own PC. DMs create a profile for the NPC they
 Start from one of the included examples:
 
 ```text
-character_Kaelen_Marr_Player_Character.txt
-character_Captain_Veyra_DM_NPC.txt
+character_Example_Player.txt
+character_Example_NPC.txt
 ```
 
 Follow **CHARACTER_PROFILE_GUIDE.md**.
 
 ## 3. Configure NWN
 
-Select the server profile, NWN client log file, and character profile you just created. 
+Leave **World / Server** on **Auto Detect** and confirm the NWN client log path. Role Weaver scans local NWN logs and adds detected worlds to the list automatically.
+
+Use **Rescan Logs** after playing on a new world. If you want to choose a log file directly, use **Browse...**; a detected world is added to the list only after Role Weaver finds it in the selected log.
 
 ## 4. Start Role Weaver
 

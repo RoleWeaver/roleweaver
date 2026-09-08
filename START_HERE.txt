@@ -13,8 +13,8 @@ AFTER INSTALLATION, DO THIS FIRST
    Use Role Weaver's Test AI Connection button.
 
 2. CREATE YOUR CHARACTER DESCRIPTION
-   Players: start from character_Kaelen_Marr_Player_Character.txt
-   DMs: start from character_Captain_Veyra_DM_NPC.txt
+   Players: start from character_Example_Player.txt
+   DMs: start from character_Example_NPC.txt
    Read: CHARACTER_PROFILE_GUIDE.md
 
 3. CONFIGURE NWN

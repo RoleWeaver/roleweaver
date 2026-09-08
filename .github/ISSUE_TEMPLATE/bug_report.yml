@@ -29,7 +29,7 @@ body:
     id: server
     attributes:
       label: NWN server/profile
-      placeholder: "Arelith, TDN, Custom, etc."
+      placeholder: "Auto-detected world name (or Auto Detect if none)"
   - type: textarea
     id: problem
     attributes:

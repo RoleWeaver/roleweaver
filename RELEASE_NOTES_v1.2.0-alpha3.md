@@ -21,9 +21,9 @@ Knowledge entered or edited manually is marked authoritative. Automatic conversa
 
 Older knowledge records without stable IDs are migrated automatically when the manager is opened. Existing memory files remain compatible.
 
-## Lora Thendry Player profile
+## Supplied Player profile used during development
 
-The TDN examples include `character_Lora_Thendry_Player.txt`, based on the supplied Lora Thendry profile and its NWN roleplay rules.
+Development examples included a supplied Player profile demonstrating character-specific roleplay rules.
 
 ## Recommended testing
 
