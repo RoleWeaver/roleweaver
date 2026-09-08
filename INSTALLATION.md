@@ -242,12 +242,6 @@ After installation, the program itself works the same way for both.
 
 You can keep many player characters and NPCs in the same installation. Server-specific folders keep campaign profiles separated.
 
-
-## Built-in server profiles
-
-The server menu includes The Dragon's Neck (TDN), Arelith, Ravenloft: Prisoners of the Mist, Cormyr and the Dalelands, Star Wars: Legends of the Old Republic, Haze: Saltborne, and Custom / Other NWN Server. Each profile has its own character-profile folder and saved log path. See `SUPPORTED_SERVERS.md` for parser details.
-
-
 ## Character and lore editing
 
 After selecting a server, use **New Character...** to create your first character profile. Use **Edit Selected...** to revise it later.
