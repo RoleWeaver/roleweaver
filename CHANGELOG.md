@@ -1,3 +1,14 @@
+## v1.2.2 — Stable Maintenance Release
+
+### Memory
+- Fixed Character Memory → Summarize Now failing because an obsolete relationship-validator function name remained in the memory summarizer.
+- Summarization now uses the current relationship entity validation path.
+
+### Distribution
+- Added a dedicated Neverwinter Vault distribution package and retired the previous third-party download-site package.
+- Added Neverwinter Vault README/submission documentation.
+- Removed obsolete third-party download-site files and references from the current distribution.
+
 ## v1.2.1 — Automatic Server & Log Detection
 
 - Removed the bundled named persistent-world server list from new distributions.

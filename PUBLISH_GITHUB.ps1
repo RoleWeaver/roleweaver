@@ -18,7 +18,7 @@ Push-Location $Work
 try {
     git add -A
     git status
-    git commit -m "Release v$Version - Automatic Server and Log Detection"
+    git commit -m "Release v$Version - Stable maintenance release"
     git push origin main
     git tag "v$Version"
     git push origin "v$Version"

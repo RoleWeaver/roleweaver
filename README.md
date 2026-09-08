@@ -8,7 +8,7 @@ Role Weaver watches the NWN client log, builds roleplay context, and helps gener
 
 ## Download for Windows
 
-Use the latest release on the Role Weaver GitHub Releases page. For most users, download **`RoleWeaver-Setup-v1.2.1.exe`**. A portable build, **`RoleWeaver-Portable-v1.2.1.zip`**, is also provided.
+Use the latest release on the Role Weaver GitHub Releases page. For most users, download **`RoleWeaver-Setup-v1.2.2.exe`**. A portable build, **`RoleWeaver-Portable-v1.2.2.zip`**, is also provided.
 
 Python is not required for either packaged Windows build. Early unsigned releases may trigger Microsoft SmartScreen.
 
@@ -86,7 +86,7 @@ F9 deliberately leaves the final Enter to the player/DM so the reply can be revi
 
 ## Automatic world and log detection
 
-Role Weaver v1.2.1 does not ship with a named persistent-world compatibility list. It discovers worlds from the NWN client logs already present on the user's computer and stores those profiles locally.
+Role Weaver v1.2.2 does not ship with a named persistent-world compatibility list. It discovers worlds from the NWN client logs already present on the user's computer and stores those profiles locally.
 
 The parser also adapts to several NWN chat-log layouts. When both `[CHAT WINDOW TEXT]` and a structured copy of the same message are present, Role Weaver prefers the structured record to avoid duplicate conversation context. Use **Rescan Logs** to refresh locally discovered worlds. **Browse...** can point Role Weaver at a different NWN client log; if the log identifies a world, that world is then added to the list.
 
@@ -114,4 +114,4 @@ Contact **roleweaverinfo@gmail.com** with questions, bug reports, testing result
 
 ## License and disclaimer
 
-Role Weaver is released under the MIT License. It is an independent community project and is not affiliated with or endorsed by Beamdog, BioWare, Wizards of the Coast, OpenAI, Google, Nexus Mods, or the operators of persistent-world servers. Neverwinter Nights and related names and trademarks belong to their respective owners.
+Role Weaver is released under the MIT License. It is an independent community project and is not affiliated with or endorsed by Beamdog, BioWare, Wizards of the Coast, OpenAI, Google, or the operators of persistent-world servers. Neverwinter Nights and related names and trademarks belong to their respective owners.

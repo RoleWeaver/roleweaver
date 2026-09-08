@@ -28,7 +28,7 @@ Role Weaver supports Google Gemini, OpenAI and LM Studio. API keys are not inclu
 ## Downloads
 - `RoleWeaver-Setup-v1.2.0-alpha6.1.exe` — recommended Windows installer.
 - `RoleWeaver-Portable-v1.2.0-alpha6.1.zip` — portable Windows build.
-- `RoleWeaver-Nexus-v1.2.0-alpha6.1.zip` — portable package prepared for Nexus Mods distribution.
+- Portable distribution archive for community download sites.
 - `SHA256SUMS.txt` — checksums for release files.
 
 ## Feedback

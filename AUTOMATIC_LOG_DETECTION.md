@@ -1,6 +1,6 @@
 # Automatic World and Log Detection
 
-Role Weaver v1.2.1 does **not** ship with a named persistent-world server list.
+Role Weaver v1.2.2 does **not** ship with a named persistent-world server list.
 
 Instead, it discovers worlds locally from the Neverwinter Nights client logs on the user's own computer. This keeps Role Weaver server-neutral while still isolating character profiles, lore, campaigns, rules, and memory by world.
 

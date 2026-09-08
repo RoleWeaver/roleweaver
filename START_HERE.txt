@@ -18,7 +18,8 @@ AFTER INSTALLATION, DO THIS FIRST
    Read: CHARACTER_PROFILE_GUIDE.md
 
 3. CONFIGURE NWN
-   Select your server, log file, and character.
+   Leave World / Server on Auto Detect. Confirm the log path and select your character.
+   Detected worlds are added locally from your own NWN logs.
 
 4. PRESS START
 

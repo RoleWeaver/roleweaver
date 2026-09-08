@@ -2,7 +2,7 @@
 
 Role Weaver currently targets **Windows** and **Neverwinter Nights: Enhanced Edition**. It can be used by a normal player roleplaying their own character or by a Dungeon Master portraying NPCs.
 
-This guide covers installing from source. A future GitHub Releases build can package the same application as a standalone Windows executable.
+This guide covers both the packaged Windows release and source installation.
 
 ## Required first-time setup after installation
 
@@ -10,7 +10,7 @@ Before pressing **Start**, every user must complete these steps in this order:
 
 1. **Get a Gemini/OpenAI API key or set up LM Studio.** Follow `AI_PROVIDER_SETUP.md` and make sure **Test AI Connection** succeeds.
 2. **Create a character description.** Follow `CHARACTER_PROFILE_GUIDE.md` and start from the included player-character or DM-NPC example.
-3. Configure the NWN server/log and select that character.
+3. Leave **World / Server** on **Auto Detect**, confirm the NWN log path, and select that character.
 4. Press Start.
 
 
@@ -74,9 +74,9 @@ You can also use the included `RoleWeaver.bat` launcher after the environment ha
 
 A short Role Weaver splash screen should appear, followed by the main client.
 
-## 6. Choose a server and character
+## 6. Let Role Weaver detect the world and choose a character
 
-Open the **Server / Log** settings and select the appropriate server profile.
+Leave **World / Server** on **Auto Detect**. Role Weaver discovers worlds from the NWN client logs already on your computer. After a world is detected, it appears locally in the selector. Use **Rescan Logs** after playing on a new world, or **Browse...** to choose a log directly.
 
 Character profiles live in:
 
@@ -138,7 +138,7 @@ Lore\always_campaign_ground_rules.txt
 
 In Role Weaver:
 
-1. Confirm the **Server**, **Character**, **AI Provider**, and **Log Path**.
+1. Confirm the detected **World**, **Character**, **AI Provider**, and **Log Path**.
 2. Click **Start**.
 3. Enter or observe chat in NWN.
 4. Use the Activity panel to confirm Role Weaver is seeing the conversation.
@@ -244,7 +244,7 @@ The **World / Server** menu begins with only **Auto Detect**. Detected worlds ar
 
 ## Character and lore editing
 
-After selecting a server, use **New Character...** to create your first character profile. Use **Edit Selected...** to revise it later.
+After a world is detected, use **New Character...** to create your first character profile. Use **Edit Selected...** to revise it later.
 
 Use **Lore Editor...** to create or paste campaign/server information. Lore is saved under `Lore/<server>/` and only applies when that same server is selected. Server response rules are stored separately under `RoleplayRules/<server>/roleplay_rules.txt`.
 

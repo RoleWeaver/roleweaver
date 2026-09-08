@@ -21,8 +21,8 @@ $addData = @(
     "--add-data=PLAYER_GUIDE.md;.",
     "--add-data=DM_GUIDE.md;.",
     "--add-data=AUTOMATIC_LOG_DETECTION.md;.",
-    "--add-data=RELEASE_NOTES_v1.2.1.md;.",
-    "--add-data=TESTING_v1.2.1.md;."
+    "--add-data=RELEASE_NOTES_v1.2.2.md;.",
+    "--add-data=TESTING_v1.2.2.md;."
 )
 
 python -m PyInstaller `

@@ -69,7 +69,7 @@ Local model quality depends strongly on the model and computer. Hosted Gemini/Op
 Treat API keys like passwords:
 - Never include them in character profiles, campaign files or lore.
 - Never commit them to GitHub.
-- Never post them in Discord, forums, Nexus Mods, screenshots or bug reports.
+- Never post them in Discord, forums, download sites, screenshots or bug reports.
 - Do not email your key to Role Weaver support.
 - If a key is exposed, revoke/delete it with the provider and create a replacement.
 

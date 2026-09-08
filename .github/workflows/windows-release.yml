@@ -55,11 +55,11 @@ jobs:
         run: |
           Compress-Archive -Path "dist\RoleWeaver\*" -DestinationPath "release\RoleWeaver-Portable-v$env:ROLEWEAVER_VERSION.zip" -Force
 
-      - name: Create Nexus Mods portable ZIP
+      - name: Create Neverwinter Vault portable ZIP
         shell: pwsh
         run: |
-          Copy-Item "NEXUSMODS_README.txt" "dist\RoleWeaver\NEXUSMODS_README.txt" -Force
-          Compress-Archive -Path "dist\RoleWeaver\*" -DestinationPath "release\RoleWeaver-Nexus-v$env:ROLEWEAVER_VERSION.zip" -Force
+          Copy-Item "NEVERWINTER_VAULT_README.txt" "dist\RoleWeaver\NEVERWINTER_VAULT_README.txt" -Force
+          Compress-Archive -Path "dist\RoleWeaver\*" -DestinationPath "release\RoleWeaver-NeverwinterVault-v$env:ROLEWEAVER_VERSION.zip" -Force
 
       - name: Generate SHA256 checksums
         shell: pwsh
@@ -72,9 +72,9 @@ jobs:
           Get-FileHash "release\$portable" -Algorithm SHA256 |
             ForEach-Object { "$($_.Hash)  $portable" } |
             Add-Content "release\SHA256SUMS.txt"
-          $nexus = "RoleWeaver-Nexus-v$env:ROLEWEAVER_VERSION.zip"
-          Get-FileHash "release\$nexus" -Algorithm SHA256 |
-            ForEach-Object { "$($_.Hash)  $nexus" } |
+          $vault = "RoleWeaver-NeverwinterVault-v$env:ROLEWEAVER_VERSION.zip"
+          Get-FileHash "release\$vault" -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash)  $vault" } |
             Add-Content "release\SHA256SUMS.txt"
 
       - name: Upload build artifacts
@@ -84,7 +84,7 @@ jobs:
           path: |
             release/RoleWeaver-Setup-v${{ env.ROLEWEAVER_VERSION }}.exe
             release/RoleWeaver-Portable-v${{ env.ROLEWEAVER_VERSION }}.zip
-            release/RoleWeaver-Nexus-v${{ env.ROLEWEAVER_VERSION }}.zip
+            release/RoleWeaver-NeverwinterVault-v${{ env.ROLEWEAVER_VERSION }}.zip
             release/SHA256SUMS.txt
           if-no-files-found: error
 
@@ -97,5 +97,5 @@ jobs:
           files: |
             release/RoleWeaver-Setup-v${{ env.ROLEWEAVER_VERSION }}.exe
             release/RoleWeaver-Portable-v${{ env.ROLEWEAVER_VERSION }}.zip
-            release/RoleWeaver-Nexus-v${{ env.ROLEWEAVER_VERSION }}.zip
+            release/RoleWeaver-NeverwinterVault-v${{ env.ROLEWEAVER_VERSION }}.zip
             release/SHA256SUMS.txt

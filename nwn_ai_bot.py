@@ -55,7 +55,7 @@ GENERIC_AREA_PATTERNS = [
 DEFAULT_NWN_LOG_DIR = Path.home() / "Documents" / "Neverwinter Nights" / "logs"
 DEFAULT_NWN_LOG_PATH = str(DEFAULT_NWN_LOG_DIR / "nwclientLog1.txt")
 
-# v1.2.1 intentionally ships without named persistent-world profiles. Worlds are
+# v1.2.2 intentionally ships without named persistent-world profiles. Worlds are
 # discovered locally from the player's own NWN logs and stored only in settings.
 SERVER_PROFILES = {
     "AUTO": {"display_name": "Auto Detect", "default_log_path": DEFAULT_NWN_LOG_PATH},
@@ -3650,7 +3650,7 @@ class NWNAIBot:
                     shared_store = {}
                 for person, entries in new_shared_with_players.items():
                     person = str(person or "").strip()
-                    if not person or not is_valid_relationship_entity(person):
+                    if not person or not is_likely_relationship_character(person, confirmed_relationship_names):
                         continue
                     if not isinstance(entries, list):
                         continue
