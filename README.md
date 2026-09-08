@@ -86,10 +86,6 @@ For more detail, including LM Studio, see **AI_PROVIDER_SETUP.md**.
 
 F9 deliberately leaves the final Enter to the player/DM so the reply can be reviewed and edited in NWN.
 
-## Supported server profiles
-
-Role Weaver includes profiles for Custom/Other, The Dragon's Neck, Arelith, Ravenloft: Prisoners of the Mist, Cormyr and the Dalelands, Star Wars: Legends of the Old Republic, and Haze: Saltborne. The parser is based on standard NWN client-log chat, so additional servers can be added.
-
 ## Documentation
 
 - **FIRST_RUN.md** — first-run setup
