@@ -23,7 +23,7 @@ Follow **CHARACTER_PROFILE_GUIDE.md**.
 
 ## 3. Configure NWN
 
-Select the server profile, NWN client log file, and character profile you just created. Select the matching built-in profile for TDN, Arelith, Ravenloft: Prisoners of the Mist, Cormyr and the Dalelands, Star Wars: Legends of the Old Republic, or Haze: Saltborne. If your server is not listed, choose **Custom / Other NWN Server**.
+Select the server profile, NWN client log file, and character profile you just created. 
 
 ## 4. Start Role Weaver
 
