@@ -35,3 +35,9 @@ Features should preserve player/DM control rather than silently taking ownership
 Install Python and dependencies using the instructions in `INSTALLATION.md`.
 
 Windows packaging instructions are in `BUILDING_WINDOWS.md`.
+
+## Windows and Linux development
+
+Windows source is at the root; the self-contained Linux client is in linux/. Apply shared recovery changes to both copies of roleweaver_backup.py, roleweaver_crash.py, roleweaver_drafts.py, roleweaver_pending.py and roleweaver_storage.py. Keep platform input adapters separate. Run the root tests from the root and the Linux tests from linux/; tests use isolated temporary data.
+
+The current recovery work is unreleased. Do not create a version tag or publish a distribution until the planned feature work and release acceptance are complete. Record new work in the Unreleased changelog section. Never commit Backups, recovery drafts, pending journals, API keys or personal runtime files.

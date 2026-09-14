@@ -28,3 +28,9 @@ release/
 
 # Runtime/shared campaign state (may contain DM-private information)
 Campaigns/*/*/campaign_memory.json
+Backups/
+RoleWeaver-backup-*.zip
+
+.roleweaver.lock
+.roleweaver-session.json
+.rw-save-*.tmp

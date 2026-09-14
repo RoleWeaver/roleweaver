@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Role Weaver local runtime state
+settings.json
+next_guidance.txt
+RoleWeaver_Data/
+*.log
+
+# Per-character local AI preference files
+Characters/**/*.settings.json
+
+# Editor/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Build output
+build/
+dist/
+*.spec
+release/
+*.exe
+
+# Runtime/shared campaign state (may contain DM-private information)
+Campaigns/*/*/campaign_memory.json
+
+Backups/
+RoleWeaver-backup-*.zip
+
+.roleweaver.lock
+.roleweaver-session.json
+.rw-save-*.tmp

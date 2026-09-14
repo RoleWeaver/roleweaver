@@ -118,3 +118,7 @@ For different servers or campaigns, keep separate profiles so the same character
 The **Adaptive** tab contains Correction Learning and Character Development. Correction Learning compares an AI-authored draft with the final edited version that actually appears in the NWN log and gradually learns recurring style preferences. A one-off edit should not redefine the character.
 
 Character Development is approval-based. Role Weaver may propose a durable change when repeated IC portrayal suggests the character has genuinely evolved, but the proposal has no effect until you press **Approve Selected**. You may reject a proposal or later remove an approval. The original character profile remains authoritative and is not rewritten automatically.
+
+## Unreleased recovery features
+
+Current development source adds automatic crash protection, manual backup/restore, recovery of Guidance/Character/Lore/AI Draft edits, and durable pending summaries. See [BACKUP_RECOVERY.md](BACKUP_RECOVERY.md) and [EDIT_SUMMARY_RECOVERY.md](EDIT_SUMMARY_RECOVERY.md). Linux development source is in [linux/](linux/README.md). Existing release downloads do not yet include these changes.

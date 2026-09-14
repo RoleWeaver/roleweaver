@@ -1,3 +1,16 @@
+## Unreleased — Windows and Linux client recovery
+
+- Added manual ZIP backup/restore, validated archives, pre-restore recovery copies and rollback on write failure.
+- Added atomic saved-file replacement, automatic rotating backups (every five minutes, ten copies), session locking and recovery after unexpected shutdown.
+- Added recovered text for Guidance, character-editor text, Lore and AI Draft. Recovery is opened manually; Copy text, Ctrl+C, selected-edit deletion and Clear all are available.
+- Added per-character journals for pending IC summary events and cached responses. A completion ID saved with memory prevents duplicate application after a crash.
+- Made successful automatic backups silent while retaining error reporting.
+- Put Server / Log before Character, fixed Auto selecting cached/older logs, scoped log-reader lifetime to its bot, and added Exit Program through normal shutdown.
+- Preserved Linux X11/Wayland behavior and migrated stale default log paths to the current user's native log directory.
+- Added the previously archive-only Linux client under linux/ so both platforms can be developed in GitHub.
+- Maintainer reports the recovery tests and subsequent feedback fixes work on both platforms. Automated checks: Windows 51 passed plus one Linux-only skip; Linux source 79 passed on the Windows test host.
+- Source update only. Release assets and VERSION remain unchanged; additional features are planned before the next distribution.
+
 ## v1.2.2 — Stable Maintenance Release
 
 ### Memory

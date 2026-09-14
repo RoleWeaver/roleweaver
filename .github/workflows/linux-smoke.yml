@@ -1,0 +1,27 @@
+name: Linux client smoke tests
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: linux
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install desktop test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-venv python3-tk xdotool xclip xvfb xauth
+      - name: Check shell syntax and install Python dependencies
+        run: |
+          bash -n install-linux.sh start-role-weaver.sh
+          bash install-linux.sh
+      - name: Run unit tests
+        run: |
+          .venv/bin/python -m py_compile nwn_ai_bot.py nwn_ai_gui.py roleweaver_backup.py roleweaver_storage.py roleweaver_crash.py roleweaver_pending.py roleweaver_drafts.py
+          .venv/bin/python -B -m unittest discover -s tests -v
+      - name: Construct GUI under virtual X11 display
+        run: xvfb-run -a .venv/bin/python -B tests/smoke_linux_gui.py

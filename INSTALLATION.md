@@ -265,3 +265,7 @@ NWN/window configuration rejects the automatic Ctrl+V, you can press Ctrl+V
 manually without regenerating the response.
 
 The **Keyboard Test** button can also be used to check NWN keyboard injection.
+
+## Unreleased recovery features
+
+Current development source adds automatic crash protection, manual backup/restore, recovery of Guidance/Character/Lore/AI Draft edits, and durable pending summaries. See [BACKUP_RECOVERY.md](BACKUP_RECOVERY.md) and [EDIT_SUMMARY_RECOVERY.md](EDIT_SUMMARY_RECOVERY.md). Linux development source is in [linux/](linux/README.md). Existing release downloads do not yet include these changes.

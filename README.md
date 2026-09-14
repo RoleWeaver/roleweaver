@@ -6,6 +6,16 @@ Role Weaver watches the NWN client log, builds roleplay context, and helps gener
 
 > **The human owns the character; Role Weaver helps preserve the story.**
 
+## Unreleased development changes
+
+The current source includes backup/crash protection, recovered edits, durable pending AI summaries, and the client feedback fixes. These changes have been tested by the maintainer on Windows and Linux. They are being kept in development while additional features are added; no new distribution or version tag is being published yet. Existing v1.2.2 downloads remain the earlier builds.
+
+- Windows source and launchers are at the repository root.
+- Linux source and launchers are in [linux/](linux/README.md), preserving X11 and Ubuntu Wayland support.
+- [Backup and crash recovery](BACKUP_RECOVERY.md): atomic saves, rotating backups, startup recovery and safe restoration.
+- [Edit and summary recovery](EDIT_SUMMARY_RECOVERY.md): autosaving Guidance, Character, Lore and AI Draft text; resuming pending summary batches without applying them twice.
+- [Client fixes and acceptance checks](FEEDBACK_FIXES.md): quieter backups, Auto log selection, copy/clear recovery controls and Exit Program.
+
 ## Download for Windows
 
 Use the latest release on the Role Weaver GitHub Releases page. For most users, download **`RoleWeaver-Setup-v1.2.2.exe`**. A portable build, **`RoleWeaver-Portable-v1.2.2.zip`**, is also provided.
@@ -115,3 +125,6 @@ Contact **roleweaverinfo@gmail.com** with questions, bug reports, testing result
 ## License and disclaimer
 
 Role Weaver is released under the MIT License. It is an independent community project and is not affiliated with or endorsed by Beamdog, BioWare, Wizards of the Coast, OpenAI, Google, or the operators of persistent-world servers. Neverwinter Nights and related names and trademarks belong to their respective owners.
+# Backup and recovery
+
+Automatic crash protection now creates rotating backups every five minutes and offers recovery after an unexpected shutdown. Manual backups remain under **Settings > Backup**. See [Backup and recovery](BACKUP_RECOVERY.md) for update instructions and coverage.

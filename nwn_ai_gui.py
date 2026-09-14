@@ -1,3 +1,6 @@
+from roleweaver_drafts import DraftRecovery
+import roleweaver_storage as storage
+import roleweaver_crash as crash_protection
 import os
 import ctypes
 import queue
@@ -13,6 +16,7 @@ from tkinter import ttk, messagebox, filedialog, simpledialog
 from pathlib import Path
 
 import nwn_ai_bot as core
+import roleweaver_backup as backups
 
 
 RESOURCE_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
@@ -194,6 +198,9 @@ class NWNAIApp:
 
         self._build_ui()
         self._load_initial_values()
+        self.edit_recovery = DraftRecovery(self, core.APP_DIR)
+        self.edit_recovery.track(self.guidance_text, "Guidance")
+        self.edit_recovery.track(self.ai_draft_text, "AI Draft")
         self._poll_output()
         self._poll_bot_state()
         self._poll_guidance_file()
@@ -423,17 +430,17 @@ class NWNAIApp:
             wraplength=310,
         ).grid(row=5, column=0, columnspan=4, sticky="w", pady=(6, 0))
         ai_frame.columnconfigure(3, weight=1)
-        self._settings_nav_buttons["Character"] = ttk.Button(
-            settings_nav, text="▌ Character", style="NavSelected.TButton",
-            command=lambda: self._show_settings_panel("Character")
-        )
-        self._settings_nav_buttons["Character"].pack(fill="x", pady=(0, 3))
-
         self._settings_nav_buttons["Server / Log"] = ttk.Button(
             settings_nav, text="▌ Server / Log", style="Nav.TButton",
             command=lambda: self._show_settings_panel("Server / Log")
         )
         self._settings_nav_buttons["Server / Log"].pack(fill="x", pady=(0, 3))
+
+        self._settings_nav_buttons["Character"] = ttk.Button(
+            settings_nav, text="▌ Character", style="NavSelected.TButton",
+            command=lambda: self._show_settings_panel("Character")
+        )
+        self._settings_nav_buttons["Character"].pack(fill="x", pady=(0, 3))
 
         self._settings_nav_buttons["AI Provider"] = ttk.Button(
             settings_nav, text="▌ AI Provider", style="Nav.TButton",
@@ -441,7 +448,18 @@ class NWNAIApp:
         )
         self._settings_nav_buttons["AI Provider"].pack(fill="x")
 
-        self._show_settings_panel("Character")
+        backup_frame = ttk.LabelFrame(settings_panel_host, text="Backup / Recovery", padding=8)
+        self._settings_frames["Backup"] = backup_frame
+        ttk.Label(backup_frame, text="Automatic crash protection is on: saved data is backed up every 5 minutes; 10 copies are kept.\n\nUse manual backup/restore before starting a session.", wraplength=300).pack(anchor="w")
+        ttk.Button(backup_frame, text="Create Backup...", command=self._create_backup).pack(anchor="w", pady=8)
+        ttk.Button(backup_frame, text="Restore Backup...", command=self._restore_backup).pack(anchor="w")
+        ttk.Label(backup_frame, text="ZIP files are not encrypted and may contain private roleplay data. Store them somewhere private.", wraplength=300).pack(anchor="w", pady=8)
+        self._settings_nav_buttons["Backup"] = ttk.Button(settings_nav, text="▌ Backup", style="Nav.TButton", command=lambda: show_settings_panel("Backup"))
+        self._settings_nav_buttons["Backup"].pack(fill="x", pady=3)
+        ttk.Button(settings_nav, text="Recover Edits", command=self.recover_edits).pack(fill="x", pady=3)
+        ttk.Button(settings_nav, text="Exit Program", command=self.on_close).pack(fill="x", pady=3)
+
+        self._show_settings_panel("Server / Log")
 
         # Guidance
         guide_frame = ttk.LabelFrame(left, text="Guidance for next AI reply", padding=8)
@@ -1134,7 +1152,7 @@ class NWNAIApp:
             self.guide_status_var.set("Guidance active until cleared.")
         self._append_log("UI ready. Click Start to begin watching the NWN log.")
 
-    def _refresh_character_profiles(self, initial=False):
+    def _refresh_character_profiles(self, initial=False, load_ai_settings=True):
         profile = self._selected_server_profile() if hasattr(self, "server_var") else self.settings.get("server_profile", "AUTO")
         profiles = core.list_character_profiles(profile)
         names = [p.name for p in profiles]
@@ -1151,7 +1169,7 @@ class NWNAIApp:
 
         if target:
             self.character_profile_var.set(target)
-            self._load_selected_character_profile(save_setting=not initial)
+            self._load_selected_character_profile(save_setting=not initial, load_ai_settings=load_ai_settings)
         else:
             self.character_profile_var.set("")
             self.character_file_display_var.set("")
@@ -1268,6 +1286,8 @@ class NWNAIApp:
                 box.pack(fill="x")
                 box.insert("1.0", values.get(heading, ""))
             boxes[heading] = box
+            if heading != "Profile Type":
+                self.edit_recovery.track(box, "Character: " + heading, source=file_var.get)
 
         button_row = ttk.Frame(win, padding=(10, 0, 10, 10))
         button_row.pack(fill="x")
@@ -1287,7 +1307,7 @@ class NWNAIApp:
                     value = widget.get("1.0", "end-1c").strip()
                 parts.append(f"{heading}: {value}" if "\n" not in value else f"{heading}:\n{value}")
             path = core.resolve_character_profile(profile, filename)
-            path.write_text("\n\n".join(parts).strip() + "\n", encoding="utf-8")
+            storage.atomic_write_text(path, "\n\n".join(parts).strip() + "\n", encoding="utf-8")
             self._refresh_character_profiles(initial=False)
             if filename in list(self.character_profile_combo["values"]):
                 self.character_profile_var.set(filename)
@@ -1329,6 +1349,7 @@ class NWNAIApp:
         text = tk.Text(outer, wrap="word", bg="#1e1f22", fg="#dbdee1", insertbackground="#dbdee1",
                        relief="flat", padx=8, pady=8, selectbackground="#5865f2", selectforeground="#ffffff")
         text.pack(fill="both", expand=True, pady=(9, 8))
+        self.edit_recovery.track(text, "Lore", source=file_var.get)
 
         def refresh_files(select_name=None):
             names = [p.name for p in core.list_lore_files(profile)]
@@ -1363,7 +1384,7 @@ class NWNAIApp:
             if not content:
                 messagebox.showerror("Lore is empty", "Enter or paste lore before saving.", parent=win); return
             path = core.resolve_lore_file(profile, filename)
-            path.write_text(content + "\n", encoding="utf-8")
+            storage.atomic_write_text(path, content + "\n", encoding="utf-8")
             file_var.set(filename)
             refresh_files(filename)
             self._append_log(f"[LORE] Saved {profile}/{filename}")
@@ -1997,7 +2018,7 @@ class NWNAIApp:
                     else:
                         continue
                     dest.parent.mkdir(parents=True, exist_ok=True)
-                    dest.write_bytes(data)
+                    storage.atomic_write_bytes(dest, data)
             self._refresh_character_profiles(initial=False)
             self._refresh_dm_cast()
             self._append_log(f"[CAMPAIGN] Imported campaign pack: {source}")
@@ -2183,10 +2204,13 @@ class NWNAIApp:
     def _apply_server_settings(self):
         profile = self._selected_server_profile()
         path = self.log_path_var.get().strip()
-        if not path:
-            path = core.get_server_log_path(self.settings, profile)
-            self.log_path_var.set(path)
         settings = core.load_settings()
+        # Refresh AUTO at Start unless the user explicitly edited the path.
+        if not path or (profile == "AUTO" and path in (
+                self.settings.get("log_path"),
+                (self.settings.get("server_log_paths", {}) or {}).get("AUTO"))):
+            path = core.get_server_log_path(settings, profile)
+        self.log_path_var.set(path)
         # Re-detect the selected log at Start. This lets AUTO follow a different
         # server/log without requiring a bundled compatibility entry.
         detected = core.detect_world_from_log(path)
@@ -2388,6 +2412,12 @@ class NWNAIApp:
             return
 
         try:
+            previous_profile = self._selected_server_profile()
+            profile, log_path = self._apply_server_settings()
+            if profile != previous_profile:
+                self._refresh_character_profiles(initial=False, load_ai_settings=False)
+                self._refresh_campaigns(select="default")
+                self._refresh_dm_cast()
             filename = self.character_profile_var.get().strip()
             if not filename:
                 messagebox.showerror(
@@ -2410,8 +2440,6 @@ class NWNAIApp:
                     "The selected character profile must contain a line like 'Name: Example Character' or 'Character Name: Example Character'.",
                 )
                 return
-
-            profile, log_path = self._apply_server_settings()
 
             # Player profiles are checked against the beginning of the current NWN
             # log session. NPC profiles intentionally skip this check because a DM
@@ -2475,8 +2503,11 @@ class NWNAIApp:
             self._refresh_history_files()
             self._append_log("[HOTKEYS] F6 pause, F8 draft, F9 NWN draft, F10 auto, F11 clear, F12 stop.")
 
-            self.bot_thread = threading.Thread(target=self._log_loop, daemon=True)
+            self.bot_thread = threading.Thread(target=self._log_loop, args=(self.bot,), daemon=True)
             self.bot_thread.start()
+            if self.bot.summary_event_buffer:
+                self._append_log("[MEMORY] Resuming saved pending summary work.")
+                threading.Thread(target=self.bot.flush_memory_summary, daemon=True).start()
 
         except Exception as exc:
             self.running = False
@@ -2484,39 +2515,41 @@ class NWNAIApp:
             messagebox.showerror("Start failed", f"{type(exc).__name__}: {exc}")
             self._append_log(traceback.format_exc())
 
-    def _log_loop(self):
+    def _log_loop(self, bot=None):
+        bot = bot or self.bot
+        settings = dict(bot.settings)
         follower = core.LogFollower(
-            self.settings["log_path"],
-            float(self.settings["poll_interval_seconds"]),
+            settings["log_path"],
+            float(settings["poll_interval_seconds"]),
         )
         try:
-            for line in follower.lines(self.bot.stop_event):
-                if not self.bot or self.bot.stop_event.is_set():
+            for line in follower.lines(bot.stop_event):
+                if not bot or bot.stop_event.is_set():
                     break
 
-                self.bot.add_system_event(line)
+                bot.add_system_event(line)
 
                 event = core.parse_chat_line(
                     line,
-                    self.settings["character_name"],
-                    self.settings.get("server_profile", "AUTO"),
-                    self.settings.get("parser_profile", "adaptive"),
+                    settings["character_name"],
+                    settings.get("server_profile", "AUTO"),
+                    settings.get("parser_profile", "adaptive"),
                 )
                 if not event:
                     continue
 
-                if self.bot.should_suppress_duplicate_self(event):
+                if bot.should_suppress_duplicate_self(event):
                     try:
-                        self.bot.context.pop()
+                        bot.context.pop()
                     except IndexError:
                         pass
 
-                self.bot.add_chat_event(event)
+                bot.add_chat_event(event)
 
         except Exception:
             self.output_queue.put("[LOG ERROR] " + traceback.format_exc())
         finally:
-            self.output_queue.put("[STATE] BOT_LOOP_STOPPED")
+            self.output_queue.put(("BOT_LOOP_STOPPED", bot))
 
     def stop_bot(self):
         if not self.bot:
@@ -3250,8 +3283,8 @@ class NWNAIApp:
         try:
             while True:
                 line = self.output_queue.get_nowait()
-                if line == "[STATE] BOT_LOOP_STOPPED":
-                    if self.running:
+                if isinstance(line, tuple) and line[0] == "BOT_LOOP_STOPPED":
+                    if self.running and line[1] is self.bot:
                         self.running = False
                         self._set_running_controls(False)
                         self.character_profile_combo.configure(state="readonly")
@@ -3359,7 +3392,49 @@ class NWNAIApp:
             pass
         self.root.after(500, self._poll_guidance_file)
 
+    def _backup_ready(self):
+        # Stop can launch a background memory summary. A fresh session avoids
+        # racing those writes or reviving stale in-memory state after recovery.
+        if self.running or self.bot is not None:
+            messagebox.showinfo("Backup / Recovery", "Restart Role Weaver, then use Backup before pressing Start. Close other Role Weaver windows first.", parent=self.root)
+            return False
+        return True
+
+    def _create_backup(self):
+        if not self._backup_ready():
+            return
+        path = filedialog.asksaveasfilename(parent=self.root, title="Create Role Weaver Backup", defaultextension=".zip", initialfile=time.strftime("RoleWeaver-backup-%Y%m%d-%H%M%S.zip"), filetypes=[("ZIP backup", "*.zip")])
+        if not path:
+            return
+        try:
+            backups.create_backup(core.APP_DIR, path)
+            messagebox.showinfo("Backup created", f"Saved backup to:\n{path}", parent=self.root)
+        except Exception as exc:
+            messagebox.showerror("Backup failed", str(exc), parent=self.root)
+
+    def _restore_backup(self):
+        if not self._backup_ready():
+            return
+        if not self.edit_recovery.flush():
+            messagebox.showerror("Restore postponed", "Edits could not be autosaved. Resolve the draft recovery error before restoring.", parent=self.root)
+            return
+        path = filedialog.askopenfilename(parent=self.root, title="Restore Role Weaver Backup", filetypes=[("ZIP backup", "*.zip")])
+        if not path or not messagebox.askyesno("Restore Backup", "Replace matching saved files with this backup? Files absent from the backup will be kept. A recovery ZIP of current data will be saved in Backups.\n\nRole Weaver will close after restoring. Reopen it to load the restored data.", parent=self.root):
+            return
+        try:
+            recovery = backups.restore_backup(core.APP_DIR, path)
+        except Exception as exc:
+            messagebox.showerror("Restore failed", str(exc), parent=self.root)
+            return
+        messagebox.showinfo("Restore complete", f"Reopen Role Weaver to use your restored data.\n\nPrevious data was backed up to:\n{recovery}", parent=self.root)
+        self.root.destroy()
+
+    def recover_edits(self):
+        self.edit_recovery.show()
+
     def on_close(self):
+        if not self.edit_recovery.flush() and not messagebox.askyesno("Unsaved recovery edits", "Some recovered edits could not be saved. Close anyway and lose those changes?", parent=self.root):
+            return
         try:
             self.stop_bot()
         finally:
@@ -3376,10 +3451,21 @@ def main():
 
     root = tk.Tk()
     apply_windows_app_identity(root)
-    show_splash(root)
-    app = NWNAIApp(root)
-    root.deiconify()
-    root.mainloop()
+    root.withdraw()
+    guard = crash_protection.prepare_gui(root, core.APP_DIR)
+    if guard is None:
+        root.destroy()
+        return
+    clean = False
+    try:
+        show_splash(root)
+        app = NWNAIApp(root)
+        guard.start(app.output_queue.put)
+        root.deiconify()
+        root.mainloop()
+        clean = True
+    finally:
+        guard.close(clean=clean)
 
 
 if __name__ == "__main__":
