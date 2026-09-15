@@ -1,53 +1,102 @@
-# Neverwinter Vault Submission — Role Weaver v1.2.2
+# Neverwinter Vault Submission — Role Weaver v1.2.3
 
 ## Suggested title
-**Role Weaver - Persistent Character and Campaign Continuity for NWN & NWN2**
+
+**Role Weaver — Character and Campaign Continuity for NWN & NWN2**
 
 ## Short description
-Role Weaver is a free, open-source companion application for Neverwinter Nights and Neverwinter Nights 2 that gives player characters and DM-controlled NPCs persistent memory, relationships, continuity, story tracking, and optional AI-assisted dialogue.
+
+Free, open-source roleplay companion for all NWN and NWN2 editions, for players
+and Dungeon Masters on Windows and Linux. Persistent character/NPC memory,
+relationships, campaign continuity, editable AI drafts, AFK emotes and recovery
+protection.
 
 ## Full description
-**Role Weaver is a persistent character and campaign continuity system for Neverwinter Nights and Neverwinter Nights 2, built for both players and Dungeon Masters.**
 
-Characters in long-running roleplay worlds build histories over months or years. Role Weaver helps preserve that history by following the player's local NWN client log and maintaining persistent character knowledge, memories, relationships, conversation history, story threads, commitments, speaking style, goals, and approved character development.
+**Role Weaver supports all editions of Neverwinter Nights and Neverwinter Nights 2:**
+Original NWN, Diamond, NWN:EE, NWN2, NWN2 EE (including 64-bit client logs), and
+NWN2 with Client Extender.
 
-When the player wants assistance, Role Weaver can generate multiple context-aware dialogue suggestions based on the character and the current scene. Suggestions can be reviewed, edited, ignored, or pasted into NWN. The player remains in control of what their character actually says.
+It follows the player's local client chat log to maintain character knowledge,
+memories, relationships, conversation history, story threads, commitments,
+speaking style and approved character development. Players can generate multiple
+context-aware dialogue suggestions, review or edit them, and decide what to send.
 
-For Dungeon Masters, Role Weaver provides persistent NPC continuity, NPC Briefings, Campaign Manager tools, story beats, objectives, locations, session logs, and shared campaign continuity. These tools are designed to help maintain consistent NPCs and ongoing stories across long campaigns or teams of DMs.
+Dungeon Masters can maintain persistent NPCs, prepare NPC briefings, and manage
+campaign story beats, objectives, locations, session logs and shared continuity.
 
-### Highlights
-- Persistent character and NPC memory
-- Relationship and interaction tracking
-- Character Knowledge with privacy/confidence controls
-- Active story threads and commitments
-- Learned speaking style and correction learning
-- Player-approved character development
-- Multiple AI-generated response candidates and editable drafts
-- Player Guidance
-- AI Context inspection
-- OOC filtering
-- NPC Briefings and Campaign Manager
-- Session and storyline continuity tools
-- Automatic world/log detection
-- Generic Player and NPC example profiles
-- Google Gemini, OpenAI, and local models through LM Studio
+### New in version 1.2.3
 
-### Automatic world/log detection
-Role Weaver does not ship with a list of named persistent worlds or claim official support for particular servers. New installations begin with **Auto Detect**. Role Weaver discovers worlds from the NWN client logs already present on the user's computer and adapts to recognized log formats locally.
+- **Game Version selection** with remembered server/log settings for each edition.
+- **NWN2 chat parsing**, including mixed layouts and private-message direction.
+- **NWN2 EE log discovery**, including Temp/NWN2 EE and nwn2client64Log*.txt.
+- **F10 AFK mode:** an initial character emote, then attention checks every
+  30 seconds with a three-minute minimum interval between follow-up emotes.
+- **Backup and crash protection:** rotating backups, atomic saves and recovery.
+- **Unfinished-edit recovery** for Guidance, Character, Lore and AI Draft text,
+  with Copy text, Discard and Clear all controls that remain visible when resizing.
+- **Pending AI summary recovery** after an interruption.
+- Quieter routine backups, improved Auto log selection and clean Exit controls.
 
-### Installation
-Download `RoleWeaver-NeverwinterVault-v1.2.2.zip`, extract it to a normal folder, and run `RoleWeaver.exe`. Configure an AI provider, create or load a character profile, and leave Server / Log on Auto Detect.
+### Other features
 
-### Source code
-Role Weaver is free and open source under the MIT License.
+- Character/NPC memory and relationship tracking.
+- Character Knowledge with privacy/confidence controls.
+- Story threads, commitments and player-approved development.
+- Learned speaking style and correction learning.
+- Multiple editable AI candidates, persistent guidance and AI Context inspection.
+- OOC filtering, NPC Briefings and Campaign Manager.
+- Generic Player/NPC examples and local world discovery.
+- Google Gemini, OpenAI, and local models through LM Studio.
 
-GitHub repository:
-https://github.com/RoleWeaver/roleweaver
+### Installation and downloads
 
-GitHub releases:
-https://github.com/RoleWeaver/roleweaver/releases
+**Windows:** download **RoleWeaver-NeverwinterVault-v1.2.3.zip**, extract the
+entire archive into a writable folder, and run **RoleWeaver.exe**. Python is
+not required. Configure your AI provider, choose Game Version and Server / Log,
+then create/select a character. Back up existing data before upgrading.
 
-Questions and feedback:
-roleweaverinfo@gmail.com
+**Linux:** download **RoleWeaver-v1.2.3-Linux.tar.gz** from the GitHub release.
+Follow INSTALL_LINUX.md, then run bash install-linux.sh and
+bash start-role-weaver.sh. X11 supports automatic input and global hotkeys.
+Wayland retains manual copy/paste; automatic AFK sending is unavailable.
 
-Role Weaver is an independent community project and is not affiliated with or endorsed by Beamdog, BioWare, Wizards of the Coast, or persistent-world operators.
+### Important: select the live NWN2 client log
+
+Follow **NWN2_LOGGING.md** in the package to identify the active nwn2player.ini
+and enable ClientChatLogging and ClientEntireChatWindowLogging under
+[Game Options]. INI locations and extension logging vary by launcher/build.
+
+Original NWN2 commonly writes to **%LOCALAPPDATA%/Temp/NWN2/LOGS**.
+NWN2 EE can write directly to **%LOCALAPPDATA%/Temp/NWN2 EE**, using
+**nwclientLog1.txt** or **nwn2client64Log1.txt**. Client Extender may instead
+write dated character/chat logs under Documents/Neverwinter Nights 2/Logs.
+Linux Wine/Proton paths are inside the game's prefix.
+
+Type a new test sentence in-game and confirm it reaches the selected file
+while playing. Browse to that exact file in Role Weaver. Do not select a stale
+copy, combat-only log or server log. Role Weaver reads new lines after Start;
+select the new active file if the game rotates to another log.
+
+### Control and compatibility
+
+Normal AI suggestions are editable. AFK is an explicit opt-in to automatic
+emotes: it pauses normal automatic replies and stays quiet unless someone
+addresses the character by name or sends a Tell. Turn AFK off to cancel pending
+emotes and restore the previous response mode.
+
+Role Weaver does not install the game or Client Extender. It discovers worlds
+from local logs, without a bundled list of named servers or official server
+endorsements. Specific game patches, localized logs and third-party loggers may
+require custom paths or additional parser support. See GAME_VERSIONS.md for
+details and TESTING_v1.2.3.md for checks.
+
+## Links and license
+
+- [Source code](https://github.com/RoleWeaver/roleweaver)
+- [Version 1.2.3 downloads and checksums](https://github.com/RoleWeaver/roleweaver/releases/tag/v1.2.3)
+- Feedback: roleweaverinfo@gmail.com
+- MIT License.
+
+Role Weaver is an independent community project and is not affiliated with or
+endorsed by the game developers, publishers or persistent-world operators.
