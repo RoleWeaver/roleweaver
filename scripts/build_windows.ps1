@@ -32,6 +32,17 @@ $addData = @(
     "--add-data=TESTING_v1.2.3.md;."
 )
 
+# Include every tracked top-level guide, including installation and Vault submission.
+# Git's tracked-file list excludes local credentials, recovery files and runtime logs.
+$guideFiles = git ls-files -- '*.md' '*.txt'
+if ($LASTEXITCODE -ne 0) { throw "Unable to enumerate tracked documentation." }
+foreach ($guide in $guideFiles) {
+    if ($guide -notmatch '[/\\]' -and $guide -ne 'requirements.txt') {
+        $argument = "--add-data=$guide;."
+        if ($addData -notcontains $argument) { $addData += $argument }
+    }
+}
+
 python -m PyInstaller `
     --noconfirm `
     --clean `

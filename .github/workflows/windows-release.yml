@@ -2,6 +2,11 @@ name: Build Role Weaver Release
 
 on:
   workflow_dispatch:
+    inputs:
+      refresh_release:
+        description: Rebuild and replace the existing VERSION release downloads from the selected branch
+        type: boolean
+        default: false
   push:
     tags:
       - "v*"
@@ -117,19 +122,29 @@ jobs:
           if-no-files-found: error
 
   publish:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.refresh_release
     needs: [build-windows, build-linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify version tag
-        run: test "$GITHUB_REF_NAME" = "v$(cat VERSION)"
+      - name: Resolve and verify release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$(cat VERSION)"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            test "$GITHUB_REF_NAME" = "$tag"
+          else
+            gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null
+          fi
+          echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v4
         with:
           path: release
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           body_path: RELEASE_NOTES_v1.2.3.md
           files: release/*
           fail_on_unmatched_files: true
