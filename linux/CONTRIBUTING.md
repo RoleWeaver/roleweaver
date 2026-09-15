@@ -12,7 +12,7 @@ Before opening an issue:
 4. Include the relevant Activity-panel messages.
 5. Remove API keys, private Tells, personal paths, and other sensitive information.
 
-For NWN input/paste problems, mention whether **Keyboard Test** works and whether Neverwinter Nights is running as Administrator.
+For NWN or NWN2 input/paste problems, mention whether **Keyboard Test** works and whether Neverwinter Nights is running as Administrator.
 
 ## Feature requests
 

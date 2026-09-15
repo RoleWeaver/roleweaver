@@ -3967,7 +3967,7 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
 
     def run(self):
         print("=" * 68)
-        print("NWN:EE AI Roleplay Client")
+        print("Role Weaver: NWN & NWN2 AI Roleplay Client")
         print("=" * 68)
         print(f"Character : {self.settings['character_name']}")
         print(f"Model     : {self.settings['model']}")

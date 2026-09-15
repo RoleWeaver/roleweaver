@@ -105,7 +105,7 @@ class NWNAIApp:
     def __init__(self, root):
         self.root = root
         apply_app_identity(self.root)
-        self.root.title("Role Weaver: NWN RP Client")
+        self.root.title("Role Weaver: NWN & NWN2 RP Client")
         self.root.geometry("1240x800")
         self.root.minsize(1040, 700)
         self.root.configure(bg="#313338")
@@ -187,7 +187,7 @@ class NWNAIApp:
         self.edit_recovery.track(self.guidance_text, "Guidance")
         self.edit_recovery.track(self.ai_draft_text, "AI Draft")
         if core.is_wayland():
-            self.root.title('Role Weaver: Ubuntu Wayland — manual paste')
+            self.root.title('Role Weaver: NWN & NWN2 — Wayland manual paste')
             self.paste_draft_btn.configure(text='Copy Edited Draft')
             self._append_log('[WAYLAND] Generate drafts using the buttons. Copy, open NWN chat, Ctrl+V, then Enter. Global hotkeys and auto-send are unavailable.')
         self._poll_output()

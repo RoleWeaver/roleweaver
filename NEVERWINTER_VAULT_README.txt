@@ -1,6 +1,6 @@
 ROLE WEAVER v1.2.3
 
-Persistent Character and Campaign Continuity for Neverwinter Nights: Enhanced Edition
+Persistent Character and Campaign Continuity for Neverwinter Nights and Neverwinter Nights 2
 
 Role Weaver is a free, open-source companion application for players and Dungeon Masters. It reads the local NWN client log, maintains persistent character/NPC continuity, and can generate editable context-aware roleplay responses while leaving the player or DM in control.
 

@@ -1,6 +1,8 @@
 # Role Weaver
 
-**AI-assisted persistent character and campaign continuity for Neverwinter Nights: Enhanced Edition — for players and Dungeon Masters.**
+Role Weaver supports all editions of Neverwinter Nights (NWN) and Neverwinter Nights 2 (NWN2), including Original NWN, Diamond, both Enhanced Editions, and NWN2 with Client Extender. Available input features depend on the platform; see [game setup](GAME_VERSIONS.md).
+
+**AI-assisted persistent character and campaign continuity for Neverwinter Nights and Neverwinter Nights 2 — for players and Dungeon Masters.**
 
 Role Weaver watches the NWN client log, builds roleplay context, and helps generate character-consistent dialogue and emotes. It combines editable AI-assisted replies with persistent character memory, continuity, relationships, character development, NPC briefings, and DM campaign-management tools.
 

@@ -1,13 +1,13 @@
 # Neverwinter Vault Submission — Role Weaver v1.2.2
 
 ## Suggested title
-**Role Weaver - Persistent Character and Campaign Continuity for NWN:EE**
+**Role Weaver - Persistent Character and Campaign Continuity for NWN & NWN2**
 
 ## Short description
-Role Weaver is a free, open-source companion application for Neverwinter Nights: Enhanced Edition that gives player characters and DM-controlled NPCs persistent memory, relationships, continuity, story tracking, and optional AI-assisted dialogue.
+Role Weaver is a free, open-source companion application for Neverwinter Nights and Neverwinter Nights 2 that gives player characters and DM-controlled NPCs persistent memory, relationships, continuity, story tracking, and optional AI-assisted dialogue.
 
 ## Full description
-**Role Weaver is a persistent character and campaign continuity system for Neverwinter Nights: Enhanced Edition, built for both players and Dungeon Masters.**
+**Role Weaver is a persistent character and campaign continuity system for Neverwinter Nights and Neverwinter Nights 2, built for both players and Dungeon Masters.**
 
 Characters in long-running roleplay worlds build histories over months or years. Role Weaver helps preserve that history by following the player's local NWN client log and maintaining persistent character knowledge, memories, relationships, conversation history, story threads, commitments, speaking style, goals, and approved character development.
 

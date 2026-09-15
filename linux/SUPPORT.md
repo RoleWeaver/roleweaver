@@ -9,7 +9,7 @@ Before posting, remove API keys, private conversations, personal file paths, and
 Useful information to include:
 - Role Weaver version
 - Windows version
-- Neverwinter Nights: Enhanced Edition window mode
+- NWN or NWN2 edition, log filename, and window mode
 - selected server profile
 - AI provider and model
 - relevant Activity-panel output

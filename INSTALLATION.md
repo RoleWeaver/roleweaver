@@ -1,6 +1,6 @@
 # Role Weaver Installation Guide
 
-Role Weaver currently targets **Windows** and **Neverwinter Nights: Enhanced Edition**. It can be used by a normal player roleplaying their own character or by a Dungeon Master portraying NPCs.
+Role Weaver supports **Windows and Linux** and all editions of **Neverwinter Nights (NWN) and Neverwinter Nights 2 (NWN2)**. Linux installation instructions are in [linux/INSTALL_LINUX.md](linux/INSTALL_LINUX.md). It can be used by a normal player roleplaying their own character or by a Dungeon Master portraying NPCs.
 
 This guide covers both the packaged Windows release and source installation.
 

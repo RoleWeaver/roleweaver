@@ -8,7 +8,7 @@ Before publishing Role Weaver on GitHub:
 - [ ] Replace any placeholder repository links in documentation.
 - [ ] Confirm no API keys, personal log paths, private character profiles, or conversation histories are committed.
 - [ ] Test a clean install on a Windows machine or VM.
-- [ ] Test F8/F9/F10 with NWN:EE.
+- [ ] Test F8/F9/F10 with the selected NWN or NWN2 edition (F10 is AFK).
 - [ ] Test OpenAI, Gemini, and LM Studio with currently supported models.
 - [ ] Confirm the splash image and taskbar icon display correctly.
 - [ ] Verify `requirements.txt` installs in a fresh virtual environment.

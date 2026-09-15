@@ -1,5 +1,7 @@
 # Role Weaver for Dungeon Masters
 
+Role Weaver supports all editions of Neverwinter Nights (NWN) and Neverwinter Nights 2 (NWN2), including Original NWN, Diamond, both Enhanced Editions, and NWN2 with Client Extender. Available input features depend on the platform; see [game setup](GAME_VERSIONS.md).
+
 
 Before live RP, first complete **AI_PROVIDER_SETUP.md**, then create your character/NPC using **CHARACTER_PROFILE_GUIDE.md**.
 

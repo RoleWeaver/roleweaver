@@ -120,7 +120,7 @@ class NWNAIApp:
     def __init__(self, root):
         self.root = root
         apply_windows_app_identity(self.root)
-        self.root.title("Role Weaver: NWN RP Client")
+        self.root.title("Role Weaver: NWN & NWN2 RP Client")
         self.root.geometry("1240x800")
         self.root.minsize(1040, 700)
         self.root.configure(bg="#313338")

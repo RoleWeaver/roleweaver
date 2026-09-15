@@ -1,5 +1,7 @@
 # Role Weaver Features
 
+Role Weaver supports all editions of Neverwinter Nights (NWN) and Neverwinter Nights 2 (NWN2), including Original NWN, Diamond, both Enhanced Editions, and NWN2 with Client Extender. Available input features depend on the platform; see [game setup](GAME_VERSIONS.md).
+
 Role Weaver is a **Neverwinter Nights roleplay client for both players and Dungeon Masters**. The same continuity engine can support a player's personal character or a DM's recurring NPC.
 
 ## For players
