@@ -1,58 +1,52 @@
-# Role Weaver 1.2.2 — Ubuntu Wayland fix
+# Role Weaver 1.2.3 — Linux installation
 
-This revision removes the startup rejection on Ubuntu Wayland. The Tk interface
-runs through Xwayland. Log reading, AI drafts, character memory, lore, and campaign
-features remain available. On Wayland, use the on-screen buttons to generate a
-reply and **Copy Edited Draft**; open NWN chat and press Ctrl+V yourself, then
-review and press Enter. Global hotkeys, automatic focusing/pasting, and automatic
-replies are disabled on Wayland. The X11 backend retains its existing behavior.
+Supports NWN and NWN2 editions. Native NWN:EE uses its user-data logs; classic
+installations and NWN2 through Wine/Proton may require custom log selection.
 
-## Install on Ubuntu
+Download **RoleWeaver-v1.2.3-Linux.tar.gz** from the
+[v1.2.3 release](https://github.com/RoleWeaver/roleweaver/releases/tag/v1.2.3).
+Extract into a writable folder. In a full repository checkout, use linux/;
+the Linux release archive already contains the client root.
 
-Extract this package into a new writable folder. Keep your old installation and
-data as a backup. In an Ubuntu desktop terminal:
+## Ubuntu setup
 
-```bash
-sudo apt update
-sudo apt install python3 python3-venv python3-pip python3-tk xwayland wl-clipboard xdotool xclip
-cd /path/to/RoleWeaver-v1.2.2-Linux-UbuntuFix
-bash install-linux.sh
-bash start-role-weaver.sh
-```
+Install desktop dependencies:
 
-Run the last two commands as your normal user. Xwayland must be enabled by your
-desktop session; do not invent a DISPLAY value if the launcher reports it missing.
+    sudo apt update
+    sudo apt install python3 python3-venv python3-pip python3-tk xwayland wl-clipboard xdotool xclip
 
-After starting the bot, use Clipboard Test, then manually paste into NWN chat and
-press Escape. Generate a reply, edit it, and use Copy Edited Draft. Copied text is
-not recorded as spoken dialogue; the actual NWN log remains authoritative.
+Open a terminal in the client folder and run as your normal desktop user:
 
-To retain an existing installation without moving its data, close Role Weaver,
-back up that folder, then replace only these files from this package:
-linux_platform.py, linux_start.py, nwn_ai_bot.py, nwn_ai_gui.py, install-linux.sh,
-start-role-weaver.sh. Install wl-clipboard and xwayland, then run the launcher.
-Do not copy the generic Characters/Campaigns folders over your personal profiles.
+    bash install-linux.sh
+    bash start-role-weaver.sh
 
-Python 3.10+ is required. The package is source-based; installation downloads its
-dependencies. Settings and personal data remain beside the application. Default
-log discovery includes ~/.local/share/Neverwinter Nights/logs; Browse supports
-custom paths. NWN_USER_DIRECTORY can specify a custom user directory.
+Python 3.10+ is required. The installer creates .venv and downloads dependencies.
+Do not run these two scripts as root.
 
-This remains a testing candidate. The user reported running the prior build in
-Docker; that does not establish Wayland or NWN input compatibility. This revision
-passed 22 mocked/unit tests and compilation here, but no live Ubuntu session was
-available to validate GUI rendering, clipboard paste, or gameplay.
+## X11 and Wayland
 
-## Acceptance checks on Ubuntu
+X11 supports automatic game input and global F-keys. Use Keyboard Test before
+enabling AFK. Wayland uses on-screen controls and manual copy/paste through
+Xwayland and wl-clipboard. Global hotkeys and automatic AFK sending are unavailable.
 
-- Launch on Wayland without the old rejection; verify the title says manual paste.
-- Start listening and generate a reply using the buttons.
-- Clipboard Test and Copy Edited Draft both paste correctly into NWN manually.
-- Automatic replies remain disabled, including with old auto-start settings.
-- Memory -> Summarize Now completes; saved data survives restarting the client.
-- On X11, rerun the original keyboard and focus tests.
+## First run
 
-No server/NWNX integration is included.
+Follow [FIRST_RUN.md](FIRST_RUN.md). Choose Game Version, locate the client log
+receiving new chat, select your character and test the AI connection.
+See [GAME_VERSIONS.md](GAME_VERSIONS.md) and [NWN2_LOGGING.md](NWN2_LOGGING.md)
+for native, Wine/Proton and NWN2 EE 64-bit paths.
 
-References: [pynput limitations](https://pynput.readthedocs.io/en/latest/limitations.html)
-and [Wayland clipboard utilities](https://github.com/bugaevc/wl-clipboard).
+## Updating and recovery
+
+Back up with the existing client's Backup control, then close it. Extract the
+new archive into a fresh folder and restore your backup if moving installations.
+Do not overwrite personal profiles with generic examples. Rerun install-linux.sh
+to install current dependencies. Settings and personal data remain with the client.
+See [BACKUP_RECOVERY.md](BACKUP_RECOVERY.md) and
+[EDIT_SUMMARY_RECOVERY.md](EDIT_SUMMARY_RECOVERY.md).
+
+## Tests
+
+    .venv/bin/python -m unittest discover -s tests
+
+Follow [TESTING_v1.2.3.md](TESTING_v1.2.3.md) for live-game and AFK checks.

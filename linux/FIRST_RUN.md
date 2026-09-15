@@ -1,58 +1,25 @@
-# Role Weaver 1.2.2 — Ubuntu Wayland fix
+# Role Weaver 1.2.3 — First Run
 
-This revision removes the startup rejection on Ubuntu Wayland. The Tk interface
-runs through Xwayland. Log reading, AI drafts, character memory, lore, and campaign
-features remain available. On Wayland, use the on-screen buttons to generate a
-reply and **Copy Edited Draft**; open NWN chat and press Ctrl+V yourself, then
-review and press Enter. Global hotkeys, automatic focusing/pasting, and automatic
-replies are disabled on Wayland. The X11 backend retains its existing behavior.
+1. Install using [INSTALLATION.md](INSTALLATION.md).
+2. Enable game chat logging. For NWN2, follow [NWN2_LOGGING.md](NWN2_LOGGING.md)
+   to locate the active INI and file receiving new chat.
+3. Choose **Game Version**, then **Server / Log**. Auto Detect discovers local
+   worlds; Browse to the actual live file when the suggested path is wrong.
+4. Create/select the correct player character or DM NPC for that world.
+   See [CHARACTER_PROFILE_GUIDE.md](CHARACTER_PROFILE_GUIDE.md).
+5. Configure your AI provider and confirm **Test AI Connection** succeeds.
+   See [AI_PROVIDER_SETUP.md](AI_PROVIDER_SETUP.md).
+6. Press **Start**, make a new in-game chat message and check Activity.
+   Old log contents are not replayed at Start.
+7. F8 generates candidate drafts. F9 places an editable draft in game chat on
+   supported platforms; review it and press Enter yourself.
+8. F10 / AFK sends an initial character emote, checks attention every 30 seconds,
+   and allows follow-ups no more often than every three minutes.
+   Test keyboard delivery first and read [AFK_MODE.md](AFK_MODE.md).
+9. Use Backup to save data and Recover Edits to copy, discard or clear saved
+   Guidance, Character, Lore and AI Draft text. Close with **Exit Program**.
 
-## Install on Ubuntu
-
-Extract this package into a new writable folder. Keep your old installation and
-data as a backup. In an Ubuntu desktop terminal:
-
-```bash
-sudo apt update
-sudo apt install python3 python3-venv python3-pip python3-tk xwayland wl-clipboard xdotool xclip
-cd /path/to/RoleWeaver-v1.2.2-Linux-UbuntuFix
-bash install-linux.sh
-bash start-role-weaver.sh
-```
-
-Run the last two commands as your normal user. Xwayland must be enabled by your
-desktop session; do not invent a DISPLAY value if the launcher reports it missing.
-
-After starting the bot, use Clipboard Test, then manually paste into NWN chat and
-press Escape. Generate a reply, edit it, and use Copy Edited Draft. Copied text is
-not recorded as spoken dialogue; the actual NWN log remains authoritative.
-
-To retain an existing installation without moving its data, close Role Weaver,
-back up that folder, then replace only these files from this package:
-linux_platform.py, linux_start.py, nwn_ai_bot.py, nwn_ai_gui.py, install-linux.sh,
-start-role-weaver.sh. Install wl-clipboard and xwayland, then run the launcher.
-Do not copy the generic Characters/Campaigns folders over your personal profiles.
-
-Python 3.10+ is required. The package is source-based; installation downloads its
-dependencies. Settings and personal data remain beside the application. Default
-log discovery includes ~/.local/share/Neverwinter Nights/logs; Browse supports
-custom paths. NWN_USER_DIRECTORY can specify a custom user directory.
-
-This remains a testing candidate. The user reported running the prior build in
-Docker; that does not establish Wayland or NWN input compatibility. This revision
-passed 22 mocked/unit tests and compilation here, but no live Ubuntu session was
-available to validate GUI rendering, clipboard paste, or gameplay.
-
-## Acceptance checks on Ubuntu
-
-- Launch on Wayland without the old rejection; verify the title says manual paste.
-- Start listening and generate a reply using the buttons.
-- Clipboard Test and Copy Edited Draft both paste correctly into NWN manually.
-- Automatic replies remain disabled, including with old auto-start settings.
-- Memory -> Summarize Now completes; saved data survives restarting the client.
-- On X11, rerun the original keyboard and focus tests.
-
-No server/NWNX integration is included.
-
-References: [pynput limitations](https://pynput.readthedocs.io/en/latest/limitations.html)
-and [Wayland clipboard utilities](https://github.com/bugaevc/wl-clipboard).
+F6 pauses/resumes, F11 clears current context and F12 stops the client.
+On Linux Wayland, use on-screen controls and manual copy/paste; automatic AFK
+sending and global hotkeys are unavailable.
+See [TESTING_v1.2.3.md](TESTING_v1.2.3.md) for acceptance checks.

@@ -1,2 +1,3 @@
-Role Weaver 1.2.2 Ubuntu Wayland fix — testing candidate
-Read INSTALL_LINUX.md. Wayland uses on-screen controls and manual clipboard paste. X11 retains keyboard integration.
+Role Weaver 1.2.3 — NWN and NWN2
+Read INSTALLATION.md, then FIRST_RUN.md. For NWN2, follow NWN2_LOGGING.md to select the live log.
+AFK_MODE.md explains F10. BACKUP_RECOVERY.md and EDIT_SUMMARY_RECOVERY.md explain recovery.

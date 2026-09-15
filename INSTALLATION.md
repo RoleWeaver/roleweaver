@@ -1,271 +1,108 @@
-# Role Weaver Installation Guide
-
-Role Weaver supports **Windows and Linux** and all editions of **Neverwinter Nights (NWN) and Neverwinter Nights 2 (NWN2)**. Linux installation instructions are in [linux/INSTALL_LINUX.md](linux/INSTALL_LINUX.md). It can be used by a normal player roleplaying their own character or by a Dungeon Master portraying NPCs.
-
-This guide covers both the packaged Windows release and source installation.
-
-## Required first-time setup after installation
-
-Before pressing **Start**, every user must complete these steps in this order:
-
-1. **Get a Gemini/OpenAI API key or set up LM Studio.** Follow `AI_PROVIDER_SETUP.md` and make sure **Test AI Connection** succeeds.
-2. **Create a character description.** Follow `CHARACTER_PROFILE_GUIDE.md` and start from the included player-character or DM-NPC example.
-3. Leave **World / Server** on **Auto Detect**, confirm the NWN log path, and select that character.
-4. Press Start.
-
-
-## 1. Download Role Weaver
-
-From the Role Weaver GitHub repository, either:
-
-- use **Code → Download ZIP**, then extract it to a normal writable folder such as `C:\RoleWeaver`, or
-- clone the repository with Git.
-
-Do not run the program directly from inside a ZIP archive.
-
-## 2. Install Python
-
-Install a current 64-bit Python 3 release for Windows. During installation, enable the option that makes Python available from the command line.
-
-Open **Command Prompt** in the Role Weaver folder and confirm:
-
-```bat
-python --version
-```
-
-If your Windows installation uses the Python launcher instead, this is also fine:
-
-```bat
-py --version
-```
-
-## 3. Create a virtual environment
-
-From the Role Weaver folder:
-
-```bat
-python -m venv .venv
-.venv\Scripts\activate
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-```
-
-Using a virtual environment keeps Role Weaver's Python packages separate from the rest of your system.
-
-## 4. Start Neverwinter Nights once
-
-Role Weaver reads the NWN client log. The usual Windows location is:
-
-```text
-%USERPROFILE%\Documents\Neverwinter Nights\logs\nwclientLog1.txt
-```
-
-If your installation stores the file elsewhere, use **Server / Log → Browse** inside Role Weaver and select the correct log file.
-
-## 5. Start Role Weaver
-
-With the virtual environment active:
-
-```bat
-python nwn_ai_gui.py
-```
-
-You can also use the included `RoleWeaver.bat` launcher after the environment has been created.
-
-A short Role Weaver splash screen should appear, followed by the main client.
-
-## 6. Let Role Weaver detect the world and choose a character
-
-Leave **World / Server** on **Auto Detect**. Role Weaver discovers worlds from the NWN client logs already on your computer. After a world is detected, it appears locally in the selector. Use **Rescan Logs** after playing on a new world, or **Browse...** to choose a log directly.
-
-Character profiles live in:
-
-```text
-Characters\<server>\
-```
-
-The stable distribution includes two generic profile examples: `character_Example_Player.txt` for a player's own character and `character_Example_NPC.txt` for a recurring DM-controlled NPC. Copy the example closest to your use case and rename the copy.
-
-Example:
-
-```text
-Characters\AUTO\character_Example_NPC.txt
-```
-
-Edit the profile in a text editor. Keep a clear `Character Name:` or `Name:` line so Role Weaver can identify the character. Players should describe the voice, beliefs, background, goals, and boundaries of their own character. DMs can use the same structure for recurring NPCs.
-
-## 7. Configure an AI provider
-
-Role Weaver supports:
-
-- **OpenAI**
-- **Google Gemini**
-- **LM Studio** for local models
-
-Select the provider in the **AI Provider** settings and use **Test AI Connection** before starting the log listener.
-
-For OpenAI or Gemini, enter your API key in the application or use the provider's supported environment variable. Role Weaver is designed not to save the API key in its normal settings files.
-
-For LM Studio, start LM Studio's local server first and enter the server URL shown by LM Studio.
-
-AI model names and provider availability change over time. If a model has been retired, choose a currently available model for your account/provider.
-
-## 8. Add campaign lore
-
-Put plain-text campaign references in:
-
-```text
-Lore\
-```
-
-Good examples include:
-
-```text
-Lore\Kingdom_of_Asterfall.txt
-Lore\Cult_of_the_Black_Sun.txt
-Lore\Captain_the NPC_Background.txt
-```
-
-Keep files focused. Role Weaver retrieves a few references that appear relevant to the current conversation.
-
-Prefix a file with `always_` only when it should be included for every generation:
-
-```text
-Lore\always_campaign_ground_rules.txt
-```
-
-## 9. Start the listener
-
-In Role Weaver:
-
-1. Confirm the detected **World**, **Character**, **AI Provider**, and **Log Path**.
-2. Click **Start**.
-3. Enter or observe chat in NWN.
-4. Use the Activity panel to confirm Role Weaver is seeing the conversation.
-
-Important hotkeys:
-
-```text
-F6   Pause / resume listening
-F8   Generate multiple candidate drafts
-F9   Generate and place an editable draft into NWN
-F10  Toggle auto reply
-F11  Clear current conversation context
-F12  Stop Role Weaver
-```
-
-F9 intentionally does **not** press the final Enter key. Review and edit the NWN chat text before sending it.
-
-## 10. Create a desktop shortcut
-
-After installing the Python dependencies, right-click `Create_RoleWeaver_Desktop_Shortcut.ps1` and choose **Run with PowerShell**, or run:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\Create_RoleWeaver_Desktop_Shortcut.ps1
-```
-
-The shortcut uses the included Role Weaver icon.
-
-If your organization blocks PowerShell scripts, create a shortcut manually to `RoleWeaver.bat` and choose `assets\RoleWeaver.ico` as the shortcut icon.
-
-## Where Role Weaver stores data
-
-Runtime continuity data is placed under:
-
-```text
-RoleWeaver_Data\<server>\<character>\
-```
-
-This can include:
-
-- persistent character memory,
-- the running summary,
-- archived session summaries,
-- conversation history.
-
-Character-specific AI preferences are stored beside character profiles in `.settings.json` files.
-
-Treat these files as campaign data. Review them before sharing them publicly.
-
-## Updating
-
-For source installs:
-
-1. Stop Role Weaver.
-2. Back up `Characters`, `Lore`, and `RoleWeaver_Data`.
-3. Pull/download the new version.
-4. Re-run:
-
-```bat
-.venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-5. Restore or merge your campaign data as needed.
-
-## Troubleshooting
-
-### Role Weaver sees no chat
-
-Check that NWN is running and that the selected log file is receiving new lines. Use **Browse** to point Role Weaver at the correct `nwclientLog1.txt`.
-
-### F9 generates text but nothing appears in NWN
-
-Use the built-in keyboard test first. Make sure the NWN window is focused during the short F9 countdown.
-
-### The AI provider changes unexpectedly
-
-Choose the provider/model you want before pressing Start. Character-specific settings are stored per profile, so changing characters can intentionally load different AI settings.
-
-### An API model no longer exists
-
-Provider model catalogs change. Select another model available to your account and test the connection.
-
-### I want to use Role Weaver with several DMs
-
-Read [DM_GUIDE.md](DM_GUIDE.md). Share character profiles and lore through your private campaign repository. Runtime memory is local unless your group deliberately shares it.
-
-
-## Player or DM?
-
-After installation, the program itself works the same way for both.
-
-**If you are a player:** select the profile for the character you are currently playing. Start with `PLAYER_GUIDE.md`.
-
-**If you are a DM:** select the NPC you are currently portraying. Start with `DM_GUIDE.md`.
-
-You can keep many player characters and NPCs in the same installation. World-specific folders keep campaign profiles separated.
-
-
-## Automatic world and log detection
-
-The **World / Server** menu begins with only **Auto Detect**. Detected worlds are added locally after Role Weaver scans or opens the user's own NWN client logs. Each detected world receives its own local character, lore, campaign, and continuity scope. See `AUTOMATIC_LOG_DETECTION.md` for detection and adaptive-parser details.
-
-
-## Character and lore editing
-
-After a world is detected, use **New Character...** to create your first character profile. Use **Edit Selected...** to revise it later.
-
-Use **Lore Editor...** to create or paste campaign/server information. Lore is saved under `Lore/<server>/` and only applies when that same server is selected. Server response rules are stored separately under `RoleplayRules/<server>/roleplay_rules.txt`.
-
-
-## NWN draft does not paste
-
-If F9 generates a response but the NWN chat bar does not open:
-
-1. Wait for the message that the reply has finished generating.
-2. During the 2-second countdown, click the Neverwinter Nights game window.
-3. Role Weaver will use scan-code keyboard input to press Enter and Ctrl+V.
-4. F9 intentionally does not press the final Enter; review/edit the text and send it yourself.
-
-For manually selected F8 candidates, use **Paste Edited Draft into NWN** after choosing or editing the draft.
-
-Role Weaver leaves an F9/manual draft on the Windows clipboard. If a particular
-NWN/window configuration rejects the automatic Ctrl+V, you can press Ctrl+V
-manually without regenerating the response.
-
-The **Keyboard Test** button can also be used to check NWN keyboard injection.
-
-## Recovery features
-
-Current development source adds automatic crash protection, manual backup/restore, recovery of Guidance/Character/Lore/AI Draft edits, and durable pending summaries. See [BACKUP_RECOVERY.md](BACKUP_RECOVERY.md) and [EDIT_SUMMARY_RECOVERY.md](EDIT_SUMMARY_RECOVERY.md). Linux development source is in [linux/](linux/README.md). Existing release downloads do not yet include these changes.
+# Role Weaver 1.2.3 — Installation
+
+Supports Windows and Linux and all NWN/NWN2 editions: Original NWN, Diamond,
+NWN:EE, NWN2, NWN2 EE and NWN2 with Client Extender.
+
+## Download and install
+
+Choose from the [v1.2.3 release](https://github.com/RoleWeaver/roleweaver/releases/tag/v1.2.3).
+
+| Package | Installation |
+| --- | --- |
+| RoleWeaver-Setup-v1.2.3.exe | Run the Windows installer |
+| RoleWeaver-Portable-v1.2.3.zip | Extract fully and run RoleWeaver.exe |
+| RoleWeaver-NeverwinterVault-v1.2.3.zip | Windows portable build with Vault README |
+| RoleWeaver-v1.2.3-Linux.tar.gz | Extract and follow INSTALL_LINUX.md |
+| GitHub source archive | Windows at root; Linux under linux/ |
+
+**Packaged Windows builds do not require Python.** Keep the supplied folders with
+the executable. Extract archives into a writable location and back up existing
+data before upgrading. Checksum files accompany the downloads.
+
+## Windows from source
+
+Install Python 3.10+ with Tkinter; release builds use Python 3.12.
+In Command Prompt, change to the source root and run:
+
+    python -m venv .venv
+    .venv\Scripts\python.exe -m pip install -r requirements.txt
+    .venv\Scripts\python.exe nwn_ai_gui.py
+
+Use py -3 for the first command if your installation uses the Python launcher.
+After setup, RoleWeaver.bat also launches the client.
+Create_RoleWeaver_Desktop_Shortcut.ps1 optionally creates a source shortcut.
+Developers can build with scripts/build_windows.ps1.
+
+## Linux
+
+Follow [Linux installation](linux/INSTALL_LINUX.md). In a full checkout, change
+to linux/ first. The Linux release archive already contains the client root.
+Run installation and launch scripts as your normal desktop user.
+
+X11 supports automatic input and global hotkeys. Wayland uses manual copy/paste
+and on-screen controls; automatic AFK sending is unavailable.
+
+## First-time setup
+
+1. Enable your game's client chat logging and enter a session.
+2. Choose **Game Version**, then **Server / Log**.
+3. Select the file receiving new chat. Auto Detect discovers local worlds; for
+   NWN2 verify the live file using [NWN2 logging](NWN2_LOGGING.md).
+4. Create/select your player character or DM NPC for that world.
+   See [character profiles](CHARACTER_PROFILE_GUIDE.md).
+5. Configure Gemini, OpenAI or LM Studio and confirm **Test AI Connection**.
+   See [AI provider setup](AI_PROVIDER_SETUP.md).
+6. Press **Start**, make a new in-game message and check Activity.
+
+Role Weaver follows new text after Start; it does not replay old contents.
+NWN2 EE may write nwclientLog1.txt or nwn2client64Log1.txt directly under
+%LOCALAPPDATA%/Temp/NWN2 EE. Original NWN2 commonly uses Temp/NWN2/LOGS.
+INI and Wine/Proton instructions are in NWN2_LOGGING.md. Do not select a stale
+copy, server log or combat-only file. If the active file changes, Stop, Browse
+to it and Start again. Stop before switching game editions.
+
+## Controls and recovery
+
+| Control | Behavior |
+| --- | --- |
+| F6 | Pause/resume |
+| F8 | Generate editable candidate drafts |
+| F9 | Place an editable draft in game chat on supported platforms |
+| F10 / AFK | Toggle Away From Keyboard |
+| F11 | Clear current conversation context |
+| F12 | Stop the client |
+
+F9 does not press the final Enter. Review the draft before sending.
+AFK sends an initial emote, then checks attention every 30 seconds with a
+three-minute minimum interval between follow-ups. See [AFK mode](AFK_MODE.md).
+Test keyboard delivery before enabling automatic sending.
+
+**Version 1.2.3 includes** backups, crash protection, pending-summary recovery and
+unfinished-edit recovery. Recover Edits has Copy text, Discard and Clear all for
+Guidance, Character, Lore and AI Draft text. Read [backup/recovery](BACKUP_RECOVERY.md)
+and [edit/summary recovery](EDIT_SUMMARY_RECOVERY.md).
+
+## Saved data and upgrading
+
+Profiles are under Characters/&lt;server&gt;/, lore under Lore/&lt;server&gt;/,
+and rules under RoleplayRules/&lt;server&gt;/. RoleWeaver_Data contains memory
+and history. Campaigns, settings and character preferences also contain personal data.
+
+1. Save a backup using the existing client's Backup control.
+2. Close with **Exit Program**.
+3. Install/extract the new version. Preserve personal data; do not replace your
+   profiles with generic examples.
+4. If moving to a fresh folder, restore your backup. Source installations need
+   their dependency-install step rerun.
+5. Verify game, live log, character and AI connection before Start.
+
+Copying Python files beside an old executable does not update it.
+
+## Troubleshooting and next steps
+
+- No chat: verify a new test sentence reaches the selected file while playing.
+- No paste: use Keyboard Test and focus the correct window. On Wayland,
+  use Copy Edited Draft and paste manually.
+- Provider changes with character: provider/model preferences are per profile.
+- Continue with [First Run](FIRST_RUN.md), [Player Guide](PLAYER_GUIDE.md),
+  [DM Guide](DM_GUIDE.md) or [v1.2.3 tests](TESTING_v1.2.3.md).
