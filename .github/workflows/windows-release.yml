@@ -79,7 +79,7 @@ jobs:
             Add-Content "release\SHA256SUMS.txt"
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: RoleWeaver-Windows-v${{ env.ROLEWEAVER_VERSION }}
           path: |
@@ -110,7 +110,7 @@ jobs:
           git archive --format=tar --prefix="RoleWeaver-v$version-Linux/" HEAD:linux | gzip > "release/RoleWeaver-v$version-Linux.tar.gz"
           cd release
           sha256sum *.tar.gz > SHA256SUMS-Linux.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: RoleWeaver-Linux
           path: release/*
