@@ -1,3 +1,17 @@
+## 1.2.3
+
+- Add automatic backup/crash recovery, atomic saves, recovered edits and durable pending AI summaries.
+- Keep recovery Copy, Discard and Clear all controls visible while resizing; add scrolling.
+- Discover NWN2 EE Temp/NWN2 EE logs, including nwn2client64Log*.txt.
+- Document NWN2 INI logging setup and selection of the live client log.
+- Publish Windows installer/portable packages and a Linux source distribution.
+- Quiet routine backup activity, fix Auto log selection, and add clean Exit controls.
+
+- Add Game Version controls above Server / Log for NWN Original, Diamond, NWN:EE, NWN2, NWN2 EE and Client Extender; remember log/server settings per edition and discover Windows and Linux Wine/Proton candidate paths.
+- Parse mixed NWN2 chat layouts, private-message direction and area lines while ignoring combat/script noise; see GAME_VERSIONS.md for validation and live-game limitations.
+
+- Replace F10 Auto Reply with AFK on Windows and Linux X11: initial character emote, 30-second attention checks, three-minute cooldown, and cancellation when disabled or stopped.
+
 ## v1.2.2 — Stable Maintenance Release
 
 ### Memory

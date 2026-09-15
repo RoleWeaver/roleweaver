@@ -18,14 +18,18 @@ $addData = @(
     "--add-data=BACKUP_RECOVERY.md;.",
     "--add-data=EDIT_SUMMARY_RECOVERY.md;.",
     "--add-data=FEEDBACK_FIXES.md;.",
+    "--add-data=AFK_MODE.md;.",
+    "--add-data=GAME_VERSIONS.md;.",
+    "--add-data=NWN2_LOGGING.md;.",
+    "--add-data=VERSION;.",
     "--add-data=FIRST_RUN.md;.",
     "--add-data=AI_PROVIDER_SETUP.md;.",
     "--add-data=CHARACTER_PROFILE_GUIDE.md;.",
     "--add-data=PLAYER_GUIDE.md;.",
     "--add-data=DM_GUIDE.md;.",
     "--add-data=AUTOMATIC_LOG_DETECTION.md;.",
-    "--add-data=RELEASE_NOTES_v1.2.2.md;.",
-    "--add-data=TESTING_v1.2.2.md;."
+    "--add-data=RELEASE_NOTES_v1.2.3.md;.",
+    "--add-data=TESTING_v1.2.3.md;."
 )
 
 python -m PyInstaller `

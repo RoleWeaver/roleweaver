@@ -1,3 +1,5 @@
+from roleweaver_games import GAME_VERSIONS, switch_game, default_game_log, discover_game_logs, parse_nwn2
+from roleweaver_afk import AFKMixin
 from linux_platform import migrate_default_log_paths
 import copy
 from roleweaver_pending import SummaryJournal
@@ -66,6 +68,7 @@ SERVER_PROFILES = {
 }
 
 DEFAULT_SETTINGS = {
+    "game_version": "nwn_ee",
     "server_profile": "AUTO",
     "server_log_paths": {
         "AUTO": DEFAULT_NWN_LOG_PATH,
@@ -126,6 +129,8 @@ def server_display_name(settings, server_profile=None):
 
 def discover_nwn_log_files(settings=None, max_files=20):
     """Return likely NWN client logs, newest first, without contacting any server."""
+    if settings and settings.get("game_version", "nwn_ee") != "nwn_ee":
+        return discover_game_logs(settings, max_files)
     candidates = []
     seen = set()
     configured = []
@@ -316,7 +321,7 @@ def get_server_log_path(settings, server_profile=None):
     discovered = settings.get("discovered_servers", {}) or {}
     if profile in discovered and discovered[profile].get("log_path"):
         return discovered[profile]["log_path"]
-    return DEFAULT_NWN_LOG_PATH
+    return DEFAULT_NWN_LOG_PATH if settings.get("game_version", "nwn_ee") == "nwn_ee" else default_game_log(settings["game_version"])
 
 
 def load_character_prompt():
@@ -499,10 +504,12 @@ def detect_log_format(text):
     return "adaptive"
 
 
-def parse_chat_line(line, character_name, server_profile="AUTO", parser_profile="adaptive"):
+def parse_chat_line(line, character_name, server_profile="AUTO", parser_profile="adaptive", game_version="nwn_ee"):
     raw = str(line or "").strip()
     if not raw:
         return None
+    if str(game_version).startswith("nwn2"):
+        return parse_nwn2(raw, character_name, server_profile, _build_chat_event)
     mode = str(parser_profile or "adaptive").casefold()
     if mode == "structured":
         if raw.startswith("[CHAT WINDOW TEXT]"):
@@ -1706,7 +1713,7 @@ def load_relevant_lore(context_text, server_profile="AUTO", max_files=3, max_cha
         return []
 
     haystack = (context_text or "").casefold()
-    words = set(re.findall(r"[a-zA-Z0-9_'’-]{4,}", haystack))
+    words = set(re.findall(r"[a-zA-Z0-9_'â€™-]{4,}", haystack))
     ranked = []
 
     for path in files:
@@ -1717,8 +1724,8 @@ def load_relevant_lore(context_text, server_profile="AUTO", max_files=3, max_cha
         if not text:
             continue
 
-        stem_words = set(re.findall(r"[a-zA-Z0-9_'’-]{3,}", path.stem.casefold()))
-        body_words = set(re.findall(r"[a-zA-Z0-9_'’-]{5,}", text.casefold()))
+        stem_words = set(re.findall(r"[a-zA-Z0-9_'â€™-]{3,}", path.stem.casefold()))
+        body_words = set(re.findall(r"[a-zA-Z0-9_'â€™-]{5,}", text.casefold()))
         score = 0
 
         # Files prefixed with always_ are always included, but only for this server.
@@ -1794,10 +1801,10 @@ def is_likely_relationship_character(name, confirmed_names=()):
     confirmed = {normalize_identity_name(x).casefold() for x in confirmed_names if normalize_identity_name(x)}
     if folded in confirmed:
         return True
-    words = re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ'’-]+", clean)
+    words = re.findall(r"[A-Za-zÃ€-Ã–Ã˜-Ã¶Ã¸-Ã¿'â€™-]+", clean)
     if not words or len(words) > 5:
         return False
-    low = [w.casefold().strip("'’-.") for w in words]
+    low = [w.casefold().strip("'â€™-.") for w in words]
     if low[0] in {"the", "a", "an", "some", "those", "these", "our", "their"}:
         return False
     if any(w in RELATIONSHIP_GENERIC_ENTITY_WORDS for w in low):
@@ -1813,7 +1820,7 @@ def is_likely_relationship_character(name, confirmed_names=()):
     return True
 
 
-class NWNAIBot:
+class NWNAIBot(AFKMixin):
     def __init__(self, settings, character_prompt, client):
         self.settings = settings
         self.character_prompt = character_prompt
@@ -1828,6 +1835,7 @@ class NWNAIBot:
         self.last_external_event = None
         self.last_auto_reply_at = 0.0
         self.pending_auto_token = 0
+        self.init_afk()
         self.next_guidance = ""
 
         # Separate private Tell threads from public chat so unrelated tells do
@@ -1889,6 +1897,9 @@ class NWNAIBot:
 
     @storage.synchronized
     def add_system_event(self, line):
+        if self.settings.get("game_version", "nwn_ee").startswith("nwn2") and line.startswith("Loading Area:"):
+            self.current_area = line.partition(":")[2].strip().rstrip(".")
+            return
         if not line.startswith("[CHAT WINDOW TEXT]"):
             return
         cleaned = clean_nwn_text(_strip_chat_window_prefix(line))
@@ -1932,7 +1943,7 @@ class NWNAIBot:
         if event.get("channel") == "Tell":
             partner = event.get("speaker", "")
             if event.get("self"):
-                partner = self.last_tell_partner or "Tell"
+                partner = event.get("recipient") or self.last_tell_partner or "Tell"
             else:
                 self.last_tell_partner = partner
             key = (partner or "Tell").casefold()
@@ -1982,8 +1993,9 @@ class NWNAIBot:
             return
 
         self.last_external_event = event
+        self.observe_afk(event)
 
-        if self.paused or not self.auto_reply:
+        if self.paused or self.afk or not self.auto_reply:
             return
 
         if event["channel"] not in self.settings["auto_reply_channels"]:
@@ -2125,7 +2137,7 @@ class NWNAIBot:
         if not usable:
             return []
 
-        query_words = set(re.findall(r"[a-zA-Z0-9_'’-]{4,}", str(query_text or "").casefold()))
+        query_words = set(re.findall(r"[a-zA-Z0-9_'â€™-]{4,}", str(query_text or "").casefold()))
 
         # Always preserve the newest two, then fill remaining slots with the
         # strongest mix of topic relevance and durable importance. This lets an
@@ -2138,7 +2150,7 @@ class NWNAIBot:
             text = str(item.get("summary", "")) + " " + " ".join(
                 str(x) for x in (item.get("topics") or []) if str(x).strip()
             )
-            words = set(re.findall(r"[a-zA-Z0-9_'’-]{4,}", text.casefold()))
+            words = set(re.findall(r"[a-zA-Z0-9_'â€™-]{4,}", text.casefold()))
             overlap = len(words & query_words)
             try:
                 importance = int(item.get("importance", 0) or 0)
@@ -2818,7 +2830,7 @@ class NWNAIBot:
                         continue
                     importance = int(item.get("importance", 0) or 0)
                     stamp = str(item.get("timestamp") or "")[:10]
-                    prefix = f"  • {stamp}: " if stamp else "  • "
+                    prefix = f"  â€¢ {stamp}: " if stamp else "  â€¢ "
                     suffix = f" [importance {importance}/10]" if importance else ""
                     lines.append(prefix + summary + suffix)
 
@@ -3501,7 +3513,7 @@ class NWNAIBot:
         )
         instructions = f"""{self.character_prompt}{rules_block}
 
-You are assisting live roleplay in Neverwinter Nights.
+You are assisting live roleplay in {GAME_VERSIONS.get(self.settings.get("game_version", "nwn_ee"), "Neverwinter Nights")}.
 
 Output exactly ONE in-character chat entry suitable for sending directly into NWN.
 You may combine spoken dialogue and a short emote in the same entry.
@@ -3575,7 +3587,7 @@ Aim for a {length_guidance} response and keep it under {target_characters} chara
         )
         instructions = f"""{self.character_prompt}{rules_block}
 
-You are assisting live roleplay in Neverwinter Nights.
+You are assisting live roleplay in {GAME_VERSIONS.get(self.settings.get("game_version", "nwn_ee"), "Neverwinter Nights")}.
 Generate {count} meaningfully different candidate replies for the same moment.
 Each candidate must be a single in-character NWN chat entry.
 Do not include speaker labels or wrap spoken dialogue in quotation marks.
@@ -3654,11 +3666,14 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
             print("----------------\n")
 
     def generate_and_send(self, source="manual"):
+        epoch = self._afk_epoch
+        if self.afk or self.stop_event.is_set() or (source == "auto" and (self.paused or not self.auto_reply)):
+            return
         if is_wayland() and source != 'manual':
             print('[WAYLAND] Automatic sending is unavailable.')
             return
         reply = self.generate_reply()
-        if not reply:
+        if not reply or self.afk or epoch != self._afk_epoch or self.stop_event.is_set():
             return
 
         if is_wayland():
@@ -3684,6 +3699,8 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
             self.settings["focus_game_before_typing"] = False
 
         try:
+            if self.afk or epoch != self._afk_epoch or self.stop_event.is_set():
+                return
             sent_ok = send_chat_to_nwn(
                 reply,
                 self.settings,
@@ -3781,13 +3798,15 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
         self.paused = not self.paused
         print(f"[MODE] {'PAUSED' if self.paused else 'LISTENING'}")
 
+    def afk_available(self):
+        return not is_wayland()
+
+    def send_afk(self, text):
+        return send_chat_to_nwn(text, self.settings, leave_unsent=False)
+
     def toggle_auto(self):
-        if is_wayland():
-            self.auto_reply = False
-            print('[WAYLAND] Automatic sending is unavailable. Generate a draft and copy it to NWN manually.')
-            return
-        self.auto_reply = not self.auto_reply
-        print(f"[MODE] Auto-reply {'ON' if self.auto_reply else 'OFF'}")
+        # Compatibility for existing integrations; F10 now controls AFK.
+        self.toggle_afk()
 
     def clear_context(self):
         if self.settings.get("memory_enabled", True) and self.summary_event_buffer and not self.summary_in_progress:
@@ -3812,6 +3831,7 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
 
     def action_worker(self):
         while not self.stop_event.is_set():
+            self.check_afk()
             try:
                 action, source = self.action_queue.get(timeout=0.2)
             except queue.Empty:
@@ -3851,7 +3871,7 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
         print("  guide <text> = set persistent guidance until cleared/replaced")
         print("  guide?       = show queued guidance")
         print("  guide clear  = clear queued guidance")
-        print("  auto       = toggle auto-reply")
+        print("  afk        = toggle away-from-keyboard mode")
         print("  pause      = pause/resume listening")
         print("  clear      = clear context")
         print("  quit       = quit")
@@ -3892,8 +3912,8 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
                 self.action_queue.put(("generate_and_send", "console"))
             elif cmd == "draft":
                 self.action_queue.put(("suggest", "console"))
-            elif cmd == "auto":
-                self.action_queue.put(("toggle_auto", "console"))
+            elif cmd in ("afk", "auto"):
+                self.toggle_afk()
             elif cmd == "pause":
                 self.action_queue.put(("toggle_pause", "console"))
             elif cmd == "clear":
@@ -3925,7 +3945,7 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
 
         def on_f10():
             print("[HOTKEY] F10 detected")
-            self.action_queue.put(("toggle_auto", "hotkey"))
+            self.toggle_afk()
 
         def on_f11():
             self.action_queue.put(("clear", "hotkey"))
@@ -3958,7 +3978,7 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
         print("  F7   Keyboard test: open chat + type text, DO NOT send")
         print("  F8   Generate a draft in this console only")
         print("  F9   Generate a reply and send it to NWN")
-        print("  F10  Toggle automatic replies")
+        print("  F10  Toggle AFK (away from keyboard)")
         print("  F11  Clear conversation context")
         print("  F12  Quit")
         print()
@@ -3986,6 +4006,7 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
                     self.settings["character_name"],
                     self.settings.get("server_profile", "AUTO"),
                     self.settings.get("parser_profile", "adaptive"),
+                    self.settings.get("game_version", "nwn_ee"),
                 )
                 if not event:
                     continue

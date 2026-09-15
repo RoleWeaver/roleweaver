@@ -244,7 +244,7 @@ class NWNAIApp:
         settings_shell.pack(fill="x", padx=8, pady=(4, 8))
         settings_shell.pack_propagate(False)
 
-        settings_nav = ttk.Frame(settings_shell, width=112, style="Sidebar.TFrame")
+        settings_nav = ttk.Frame(settings_shell, width=132, style="Sidebar.TFrame")
         settings_nav.pack(side="left", fill="y", padx=(0, 8))
         settings_nav.pack_propagate(False)
 
@@ -331,6 +331,16 @@ class NWNAIApp:
             wraplength=310,
         ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(5, 0))
         character_frame.columnconfigure(0, weight=1)
+
+        game_frame = ttk.LabelFrame(settings_panel_host, text="Game Version", padding=8)
+        self._settings_frames["Game Version"] = game_frame
+        self.game_var = tk.StringVar(value=core.GAME_VERSIONS.get(self.settings.get("game_version", "nwn_ee"), core.GAME_VERSIONS["nwn_ee"]))
+        self.game_combo = ttk.Combobox(game_frame, textvariable=self.game_var,
+                                      values=list(core.GAME_VERSIONS.values()), state="readonly", width=38)
+        self.game_combo.pack(fill="x")
+        self.game_combo.bind("<<ComboboxSelected>>", self._on_game_changed)
+        ttk.Label(game_frame, text="Select your game before selecting a server. Use Server / Log to browse to a custom installation, Wine/Proton prefix, or Client Extender chat log. Stop the client before changing games.",
+                  wraplength=310).pack(fill="x", pady=8)
 
         # Server / log profile
         server_frame = ttk.LabelFrame(settings_panel_host, text="Server and Log", padding=8)
@@ -419,6 +429,10 @@ class NWNAIApp:
             wraplength=310,
         ).grid(row=5, column=0, columnspan=4, sticky="w", pady=(6, 0))
         ai_frame.columnconfigure(3, weight=1)
+        self._settings_nav_buttons["Game Version"] = ttk.Button(
+            settings_nav, text="▌ Game Version", style="Nav.TButton",
+            command=lambda: self._show_settings_panel("Game Version"))
+        self._settings_nav_buttons["Game Version"].pack(fill="x", pady=(0, 3))
         self._settings_nav_buttons["Server / Log"] = ttk.Button(
             settings_nav, text="▌ Server / Log", style="Nav.TButton",
             command=lambda: self._show_settings_panel("Server / Log")
@@ -502,7 +516,7 @@ class NWNAIApp:
         row2.pack(fill="x", pady=(7, 0))
 
         self.auto_btn = ttk.Button(
-            row2, text="Auto Reply OFF (F10)", command=self.toggle_auto, state="disabled"
+            row2, text="AFK OFF (F10)", command=self.toggle_auto, state="disabled"
         )
         self.auto_btn.pack(side="left", fill="x", expand=True)
 
@@ -2136,6 +2150,23 @@ class NWNAIApp:
                 return key
         return self.settings.get("server_profile", "AUTO")
 
+    def _on_game_changed(self, event=None):
+        if self.running:
+            self.game_var.set(core.GAME_VERSIONS[self.settings.get("game_version", "nwn_ee")])
+            return
+        game = next(key for key, label in core.GAME_VERSIONS.items() if label == self.game_var.get())
+        current = core.load_settings()
+        current["log_path"] = self.log_path_var.get().strip() or current["log_path"]
+        current.setdefault("server_log_paths", {})[current.get("server_profile", "AUTO")] = current["log_path"]
+        self.settings = core.switch_game(current, game)
+        core.save_settings(self.settings)
+        self.log_path_var.set(self.settings["log_path"])
+        self._refresh_server_combo(select_profile=self.settings["server_profile"])
+        self._refresh_character_profiles(initial=False)
+        self._refresh_campaigns(select="default")
+        self._refresh_dm_cast()
+        self._append_log(f"[GAME] Selected {core.GAME_VERSIONS[game]}. Check Server / Log before Start.")
+
     def _on_server_changed(self, event=None):
         if self.running:
             return
@@ -2490,7 +2521,7 @@ class NWNAIApp:
             if core.read_shared_guidance():
                 self._append_log("[GUIDE] Persistent guidance is active and will remain until cleared.")
             self._refresh_history_files()
-            self._append_log("[HOTKEYS] F6 pause, F8 draft, F9 NWN draft, F10 auto, F11 clear, F12 stop.")
+            self._append_log("[HOTKEYS] F6 pause, F8 draft, F9 NWN draft, F10 AFK, F11 clear, F12 stop.")
 
             self.bot_thread = threading.Thread(target=self._log_loop, args=(self.bot,), daemon=True)
             self.bot_thread.start()
@@ -2523,6 +2554,7 @@ class NWNAIApp:
                     settings["character_name"],
                     settings.get("server_profile", "AUTO"),
                     settings.get("parser_profile", "adaptive"),
+                    settings.get("game_version", "nwn_ee"),
                 )
                 if not event:
                     continue
@@ -2634,7 +2666,7 @@ class NWNAIApp:
 
     def toggle_auto(self):
         if self.bot:
-            self.bot.action_queue.put(("toggle_auto", "ui"))
+            self.bot.toggle_afk()
 
     def _select_candidate(self, event=None):
         if not self.bot:
@@ -3347,7 +3379,7 @@ class NWNAIApp:
                     self.pause_btn.configure(text="Pause Listening (F6)")
 
                 self.auto_btn.configure(
-                    text="Auto Reply unavailable (Wayland)" if core.is_wayland() else ("Auto Reply ON (F10)" if self.bot.auto_reply else "Auto Reply OFF (F10)")
+                    text="AFK unavailable (Wayland)" if core.is_wayland() else ("AFK ON (F10)" if self.bot.afk else "AFK OFF (F10)")
                 )
 
                 if self.bot.stop_event.is_set() and self.running:

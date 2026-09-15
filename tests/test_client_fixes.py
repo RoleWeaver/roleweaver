@@ -77,10 +77,12 @@ class ClientFixTests(unittest.TestCase):
         recovery = DraftRecovery(Mock(settings={}), self.root)
         recovery.store.save("one", "full recovered text", {"label": "Guidance"})
         listing, detail, win = Mock(), Mock(), Mock()
+        win.winfo_screenwidth.return_value = 1024
+        win.winfo_screenheight.return_value = 768
         listing.curselection.return_value = ()
         detail.tag_ranges.return_value = ("sel.first", "sel.last")
         detail.get.return_value = "selected recovered text"
-        with patch("tkinter.Toplevel", return_value=win), patch("tkinter.Listbox", return_value=listing) as listbox, patch("tkinter.Text", return_value=detail) as text, patch("tkinter.ttk.Label"), patch("tkinter.ttk.Frame"), patch("tkinter.ttk.Button") as button:
+        with patch("tkinter.Toplevel", return_value=win), patch("tkinter.Listbox", return_value=listing) as listbox, patch("tkinter.Text", return_value=detail) as text, patch("tkinter.ttk.Label"), patch("tkinter.ttk.Scrollbar"), patch("tkinter.ttk.Frame"), patch("tkinter.ttk.Button") as button:
             recovery.show()
             callback = next(c.kwargs["command"] for c in button.call_args_list if c.kwargs.get("text") == "Copy text")
             callback()

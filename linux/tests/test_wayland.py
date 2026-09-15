@@ -35,10 +35,15 @@ class WaylandTests(unittest.TestCase):
             core = importlib.import_module('nwn_ai_bot')
             try:
                 bot = core.NWNAIBot.__new__(core.NWNAIBot)
-                bot.auto_reply = True
+                bot.auto_reply = False
+                bot.stop_event = __import__("threading").Event()
+                bot.paused = False
+                bot.pending_auto_token = 0
+                bot.init_afk()
                 self.assertIsNone(bot.hotkey_listener())
                 bot.toggle_auto()
                 self.assertFalse(bot.auto_reply)
+                self.assertFalse(bot.afk)
                 bot.generate_reply = Mock(return_value='Hello')
                 bot._publish_draft = Mock()
                 bot.prepare_correction_candidate = Mock()

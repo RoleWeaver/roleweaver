@@ -119,6 +119,14 @@ The **Adaptive** tab contains Correction Learning and Character Development. Cor
 
 Character Development is approval-based. Role Weaver may propose a durable change when repeated IC portrayal suggests the character has genuinely evolved, but the proposal has no effect until you press **Approve Selected**. You may reject a proposal or later remove an approval. The original character profile remains authoritative and is not rewritten automatically.
 
-## Unreleased recovery features
+## Recovery features
 
 Current development source adds automatic crash protection, manual backup/restore, recovery of Guidance/Character/Lore/AI Draft edits, and durable pending summaries. See [BACKUP_RECOVERY.md](BACKUP_RECOVERY.md) and [EDIT_SUMMARY_RECOVERY.md](EDIT_SUMMARY_RECOVERY.md). Linux development source is in [linux/](linux/README.md). Existing release downloads do not yet include these changes.
+
+### AFK mode (v1.2.3)
+
+F10 now toggles AFK. See [AFK mode](AFK_MODE.md) for 30-second attention checks, the three-minute cooldown, and platform support.
+
+### Game selection (v1.2.3)
+
+Use **Game Version** above **Server / Log** to select NWN:EE, Original NWN, Diamond, NWN2, NWN2 EE, or NWN2 with Client Extender. See [game setup and testing](GAME_VERSIONS.md) for log locations and compatibility limits.

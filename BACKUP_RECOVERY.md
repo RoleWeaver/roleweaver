@@ -53,8 +53,4 @@ Run `python -m unittest discover -s tests -v` and `python -m py_compile nwn_ai_b
 
 Crash tests include a real subprocess terminated before replacing a saved file, crash-marker survival, process-lock release, second-process rejection, injected disk-write failures, retention, a periodic worker, corrupt-archive fallback, startup recovery and preservation of damaged data. GUI callbacks are tested with dialogs mocked.
 
-The Windows source passed 51 automated tests (one Linux-only test skipped); the Linux source passed 79, including its existing X11/Wayland unit tests, on the Windows test host. Compilation passed for both. Full desktop/gameplay acceptance remains untested: the bundled Tk runtime cannot construct a window because its Tcl files are missing, and no usable native Linux desktop is available. The Linux virtual-X11 smoke test is included for execution on Linux. These are unreleased source changes, not newly built Windows executables.
-
 ## Development status
-
-The maintainer confirmed the recovery and feedback-fix tests work on Windows and Linux. Further features will be added before creating the next distribution. Automated tests ran on the Windows host; that does not establish exhaustive native Linux desktop or gameplay coverage.

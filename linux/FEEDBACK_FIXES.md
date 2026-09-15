@@ -16,8 +16,6 @@ The default is the current user's `~/.local/share/Neverwinter Nights/logs/nwclie
 
 ## Update and retest
 
-These changes are maintained in GitHub as unreleased development source. Use the source package for your platform, preserving personal data. Replace the seven Python files listed in EDIT_SUMMARY_RECOVERY.md together. On Linux, also replace linux_platform.py. Windows executable installations require a rebuild; copying Python files alongside an old executable does not update it.
-
 The maintainer confirmed these fixes work on both platforms. Repeat these checks after further changes:
 
 1. Open Guidance, a character editor, Lore and AI Draft; type, open dropdowns and switch windows. Confirm there are no draft-recovery widget errors and no recovery popup on the next launch.
@@ -29,5 +27,3 @@ The maintainer confirmed these fixes work on both platforms. Repeat these checks
 Automated checks: Windows 51 passed, one Linux-only test skipped; Linux source 79 passed, all run on the Windows host. The log-start regression test tails a real temporary file and receives appended chat. Clipboard and editor tests use mocked Tk widgets. The maintainer has confirmed the reported issues are resolved on Windows and Linux; broader gameplay/platform coverage should continue before the next release.
 
 ## Development status
-
-The maintainer confirmed the recovery and feedback-fix tests work on Windows and Linux. Further features will be added before creating the next distribution. Automated tests ran on the Windows host; that does not establish exhaustive native Linux desktop or gameplay coverage.

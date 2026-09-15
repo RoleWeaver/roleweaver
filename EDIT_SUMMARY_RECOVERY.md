@@ -40,8 +40,4 @@ Keep personal settings, profiles, lore, campaigns and memory folders. Do not ove
 
 The Windows source passes 51 tests (plus one Linux-only test skipped) and the Linux source passes 79 on the Windows host. Tests cover interrupted application, completion before queue acknowledgment, cached-response reuse, concurrent requests, events arriving during a request, atomic-save failures, draft capture during continuous typing, API-key exclusion and preservation of newer recovery work during a snapshot restore. Source compilation passes.
 
-Full desktop/gameplay acceptance remains untested here because the bundled Tk runtime lacks its Tcl files and no usable Linux desktop is available. Existing X11/Wayland adapters are retained. These are unreleased source changes; existing release downloads have not been rebuilt.
-
 ## Development status
-
-The maintainer confirmed the recovery and feedback-fix tests work on Windows and Linux. Further features will be added before creating the next distribution. Automated tests ran on the Windows host; that does not establish exhaustive native Linux desktop or gameplay coverage.

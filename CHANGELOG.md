@@ -1,15 +1,16 @@
-## Unreleased — Windows and Linux client recovery
+## 1.2.3
 
-- Added manual ZIP backup/restore, validated archives, pre-restore recovery copies and rollback on write failure.
-- Added atomic saved-file replacement, automatic rotating backups (every five minutes, ten copies), session locking and recovery after unexpected shutdown.
-- Added recovered text for Guidance, character-editor text, Lore and AI Draft. Recovery is opened manually; Copy text, Ctrl+C, selected-edit deletion and Clear all are available.
-- Added per-character journals for pending IC summary events and cached responses. A completion ID saved with memory prevents duplicate application after a crash.
-- Made successful automatic backups silent while retaining error reporting.
-- Put Server / Log before Character, fixed Auto selecting cached/older logs, scoped log-reader lifetime to its bot, and added Exit Program through normal shutdown.
-- Preserved Linux X11/Wayland behavior and migrated stale default log paths to the current user's native log directory.
-- Added the previously archive-only Linux client under linux/ so both platforms can be developed in GitHub.
-- Maintainer reports the recovery tests and subsequent feedback fixes work on both platforms. Automated checks: Windows 51 passed plus one Linux-only skip; Linux source 79 passed on the Windows test host.
-- Source update only. Release assets and VERSION remain unchanged; additional features are planned before the next distribution.
+- Add automatic backup/crash recovery, atomic saves, recovered edits and durable pending AI summaries.
+- Keep recovery Copy, Discard and Clear all controls visible while resizing; add scrolling.
+- Discover NWN2 EE Temp/NWN2 EE logs, including nwn2client64Log*.txt.
+- Document NWN2 INI logging setup and selection of the live client log.
+- Publish Windows installer/portable packages and a Linux source distribution.
+- Quiet routine backup activity, fix Auto log selection, and add clean Exit controls.
+
+- Add Game Version controls above Server / Log for NWN Original, Diamond, NWN:EE, NWN2, NWN2 EE and Client Extender; remember log/server settings per edition and discover Windows and Linux Wine/Proton candidate paths.
+- Parse mixed NWN2 chat layouts, private-message direction and area lines while ignoring combat/script noise; see GAME_VERSIONS.md for validation and live-game limitations.
+
+- Replace F10 Auto Reply with AFK on Windows and Linux X11: initial character emote, 30-second attention checks, three-minute cooldown, and cancellation when disabled or stopped.
 
 ## v1.2.2 — Stable Maintenance Release
 

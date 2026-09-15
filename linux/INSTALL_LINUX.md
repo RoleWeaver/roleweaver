@@ -1,8 +1,8 @@
-# Current development checkout
+From a repository checkout, cd linux first. The release archive already contains the client root.
 
-From the repository root, `cd linux` before running the installation/launcher commands below. The maintainer has tested the current recovery and feedback fixes on Linux. This source update does not replace the existing release archive; additional work is planned before the next distribution.
+# Linux installation
 
-# Role Weaver 1.2.2 — Ubuntu Wayland fix
+# Role Weaver 1.2.3
 
 This revision removes the startup rejection on Ubuntu Wayland. The Tk interface
 runs through Xwayland. Log reading, AI drafts, character memory, lore, and campaign
@@ -19,7 +19,7 @@ data as a backup. In an Ubuntu desktop terminal:
 ```bash
 sudo apt update
 sudo apt install python3 python3-venv python3-pip python3-tk xwayland wl-clipboard xdotool xclip
-cd /path/to/RoleWeaver-v1.2.2-Linux-UbuntuFix
+cd /path/to/RoleWeaver-v1.2.3-Linux
 bash install-linux.sh
 bash start-role-weaver.sh
 ```
@@ -33,7 +33,7 @@ not recorded as spoken dialogue; the actual NWN log remains authoritative.
 
 To retain an existing installation without moving its data, close Role Weaver,
 back up that folder, then replace only these files from this package:
-linux_platform.py, linux_start.py, nwn_ai_bot.py, nwn_ai_gui.py, roleweaver_backup.py, roleweaver_storage.py, roleweaver_crash.py, roleweaver_pending.py, roleweaver_drafts.py, install-linux.sh,
+linux_platform.py, linux_start.py, nwn_ai_bot.py, nwn_ai_gui.py, roleweaver_backup.py, roleweaver_storage.py, roleweaver_crash.py, roleweaver_pending.py, roleweaver_drafts.py, roleweaver_afk.py, roleweaver_games.py, install-linux.sh,
 start-role-weaver.sh. Install wl-clipboard and xwayland, then run the launcher.
 Do not copy the generic Characters/Campaigns folders over your personal profiles.
 
@@ -41,8 +41,6 @@ Python 3.10+ is required. The package is source-based; installation downloads it
 dependencies. Settings and personal data remain beside the application. Default
 log discovery includes ~/.local/share/Neverwinter Nights/logs; Browse supports
 custom paths. NWN_USER_DIRECTORY can specify a custom user directory.
-
-The original UbuntuFix baseline had 22 mocked/unit tests. The current Linux source has 79 passing tests on the Windows host, and the maintainer confirmed the recovery and client fixes work on Linux. Broader gameplay and desktop acceptance should continue before the next distribution.
 
 ## Acceptance checks on Ubuntu
 

@@ -126,6 +126,6 @@ to OpenAI.
 - NPC roster with direct NPC Briefing access
 - Campaign Briefing incorporates active campaign-management data
 
-## Unreleased recovery features
+## Recovery features
 
 Current development source adds automatic crash protection, manual backup/restore, recovery of Guidance/Character/Lore/AI Draft edits, and durable pending summaries. See [BACKUP_RECOVERY.md](BACKUP_RECOVERY.md) and [EDIT_SUMMARY_RECOVERY.md](EDIT_SUMMARY_RECOVERY.md). Linux development source is in [linux/](linux/README.md). Existing release downloads do not yet include these changes.

@@ -6,9 +6,11 @@ Role Weaver watches the NWN client log, builds roleplay context, and helps gener
 
 > **The human owns the character; Role Weaver helps preserve the story.**
 
-## Unreleased development changes
+## Version 1.2.3
 
-The current source includes backup/crash protection, recovered edits, durable pending AI summaries, and the client feedback fixes. These changes have been tested by the maintainer on Windows and Linux. They are being kept in development while additional features are added; no new distribution or version tag is being published yet. Existing v1.2.2 downloads remain the earlier builds.
+Includes recovery protection, AFK and game-version selection.
+[Download v1.2.3](https://github.com/RoleWeaver/roleweaver/releases/tag/v1.2.3).
+Read [release notes](RELEASE_NOTES_v1.2.3.md) and [NWN2 logging](NWN2_LOGGING.md).
 
 - Windows source and launchers are at the repository root.
 - Linux source and launchers are in [linux/](linux/README.md), preserving X11 and Ubuntu Wayland support.
@@ -18,7 +20,7 @@ The current source includes backup/crash protection, recovered edits, durable pe
 
 ## Download for Windows
 
-Use the latest release on the Role Weaver GitHub Releases page. For most users, download **`RoleWeaver-Setup-v1.2.2.exe`**. A portable build, **`RoleWeaver-Portable-v1.2.2.zip`**, is also provided.
+Use the latest release on the Role Weaver GitHub Releases page. For most users, download **`RoleWeaver-Setup-v1.2.3.exe`**. A portable build, **`RoleWeaver-Portable-v1.2.3.zip`**, is also provided.
 
 Python is not required for either packaged Windows build. Early unsigned releases may trigger Microsoft SmartScreen.
 
@@ -30,7 +32,7 @@ Python is not required for either packaged Windows build. Early unsigned release
 4. For Gemini or OpenAI, create your own API key using the instructions below and paste it into Role Weaver.
 5. Press **Test AI Connection**.
 6. Create or select a character profile.
-7. Leave **World / Server** on **Auto Detect**. Role Weaver follows the normal NWN client log automatically; use **Browse...** only when you intentionally want to choose a different log file.
+7. Select **Game Version**, then **Server / Log**. For NWN2, follow [logging setup](NWN2_LOGGING.md) and Browse to the client log receiving new chat.
 8. Role Weaver discovers a local world profile and log format when possible.
 9. Press **Start**, enter NWN, and roleplay.
 
@@ -87,7 +89,7 @@ For more detail, including LM Studio, see **AI_PROVIDER_SETUP.md**.
 | --- | --- |
 | **F8** | Generate multiple candidate drafts in Role Weaver |
 | **F9** | Generate a fresh reply and paste it into NWN without sending |
-| **F10** | Toggle automatic reply/send mode |
+| **F10** | Toggle AFK (away from keyboard) |
 | **F6** | Pause/resume listening |
 | **F11** | Clear current conversation context |
 | **F12** | Stop Role Weaver |
@@ -96,7 +98,7 @@ F9 deliberately leaves the final Enter to the player/DM so the reply can be revi
 
 ## Automatic world and log detection
 
-Role Weaver v1.2.2 does not ship with a named persistent-world compatibility list. It discovers worlds from the NWN client logs already present on the user's computer and stores those profiles locally.
+Role Weaver v1.2.3 does not ship with a named persistent-world compatibility list. It discovers worlds from the NWN client logs already present on the user's computer and stores those profiles locally.
 
 The parser also adapts to several NWN chat-log layouts. When both `[CHAT WINDOW TEXT]` and a structured copy of the same message are present, Role Weaver prefers the structured record to avoid duplicate conversation context. Use **Rescan Logs** to refresh locally discovered worlds. **Browse...** can point Role Weaver at a different NWN client log; if the log identifies a world, that world is then added to the list.
 
@@ -128,3 +130,11 @@ Role Weaver is released under the MIT License. It is an independent community pr
 # Backup and recovery
 
 Automatic crash protection now creates rotating backups every five minutes and offers recovery after an unexpected shutdown. Manual backups remain under **Settings > Backup**. See [Backup and recovery](BACKUP_RECOVERY.md) for update instructions and coverage.
+
+### AFK mode (v1.2.3)
+
+F10 now toggles AFK. See [AFK mode](AFK_MODE.md) for 30-second attention checks, the three-minute cooldown, and platform support.
+
+### Game selection (v1.2.3)
+
+Use **Game Version** above **Server / Log** to select NWN:EE, Original NWN, Diamond, NWN2, NWN2 EE, or NWN2 with Client Extender. See [game setup and testing](GAME_VERSIONS.md) for log locations and compatibility limits.
