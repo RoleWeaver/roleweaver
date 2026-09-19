@@ -8,6 +8,12 @@ Role Weaver watches the NWN client log, builds roleplay context, and helps gener
 
 > **The human owns the character; Role Weaver helps preserve the story.**
 
+## Multiplayer Server Notice
+
+Multiplayer servers have different policies on AI-assisted tools and generated content. **Always check and follow server rules before using Role Weaver**, particularly its text-generation features.
+
+Role Weaver also provides character memory, relationship tracking, profiles, and other features that remain useful without generated dialogue, but still ensure to follow server policies.
+
 ## Version 1.2.3
 
 Includes recovery protection, AFK and game-version selection.

@@ -2,6 +2,12 @@
 
 Role Weaver supports all editions of Neverwinter Nights (NWN) and Neverwinter Nights 2 (NWN2), including Original NWN, Diamond, both Enhanced Editions, and NWN2 with Client Extender. Available input features depend on the platform; see [game setup](GAME_VERSIONS.md).
 
+## Multiplayer Server Notice
+
+Multiplayer servers have different policies on AI-assisted tools and generated content. **Always check and follow server rules before using Role Weaver**, particularly its text-generation features.
+
+Role Weaver also provides character memory, relationship tracking, profiles, and other features that remain useful without generated dialogue, but still ensure to follow server policies.
+
 Self-contained source client with recovery, AFK and game selection.
 In a checkout, first cd linux. In the Linux release archive, the extracted folder
 is already the client root. Follow [INSTALL_LINUX.md](INSTALL_LINUX.md), then run
