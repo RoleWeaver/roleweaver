@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "roleweaver-client"
+dynamic = ["version"]
+description = "Shared development package for the Role Weaver Neverwinter Nights client"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{name = "RoleWeaver"}]
+keywords = ["neverwinter-nights", "roleplay", "llm"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "openai>=1.0.0",
+    "google-genai>=1.0.0",
+    "pyperclip>=1.8.2",
+    "pynput>=1.7.7",
+    "pyautogui>=0.9.54; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+dev = [
+    "build>=1.2.2",
+    "ruff>=0.9.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/RoleWeaver/roleweaver"
+Repository = "https://github.com/RoleWeaver/roleweaver"
+Issues = "https://github.com/RoleWeaver/roleweaver/issues"
+
+[tool.setuptools.dynamic]
+version = {attr = "roleweaver.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+include = ["src/**/*.py", "tests/test_ai_contracts.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

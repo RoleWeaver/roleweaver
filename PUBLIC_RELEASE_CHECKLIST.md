@@ -10,6 +10,9 @@ Before publishing Role Weaver on GitHub:
 - [ ] Test OpenAI, Gemini, and LM Studio with currently supported models.
 - [ ] Confirm the splash image and taskbar icon display correctly.
 - [ ] Verify `requirements.txt` installs in a fresh virtual environment.
+- [ ] Build and inspect the wheel and Python source distribution with `python -m build`.
+- [ ] Confirm the developer-source ZIP contains `src/`, tests and contributor documentation.
+- [ ] Confirm `SHA256SUMS.txt` covers every published release asset.
 - [ ] Tag a version such as `v0.9.0`.
 - [ ] Create a GitHub Release ZIP.
 - [ ] Add screenshots and a short GIF/video showing the F8/F9 workflow.

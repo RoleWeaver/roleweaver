@@ -39,8 +39,11 @@ jobs:
       - name: Validate Python source
         shell: pwsh
         run: |
+          python -m pip install -e ".[dev]"
           python -m py_compile nwn_ai_bot.py nwn_ai_gui.py roleweaver_backup.py roleweaver_storage.py roleweaver_crash.py roleweaver_pending.py roleweaver_drafts.py
+          python -m compileall -q src
           python -m unittest discover -s tests -v
+          python -m ruff check
 
       - name: Build Role Weaver executable
         shell: pwsh
@@ -67,31 +70,27 @@ jobs:
           Copy-Item "NEVERWINTER_VAULT_README.txt" "dist\RoleWeaver\NEVERWINTER_VAULT_README.txt" -Force
           Compress-Archive -Path "dist\RoleWeaver\*" -DestinationPath "release\RoleWeaver-NeverwinterVault-v$env:ROLEWEAVER_VERSION.zip" -Force
 
+      - name: Create developer packages
+        shell: pwsh
+        run: |
+          python -m build --outdir release
+          git archive --format=zip --prefix="RoleWeaver-Developer-v$env:ROLEWEAVER_VERSION/" --output="release/RoleWeaver-Developer-v$env:ROLEWEAVER_VERSION.zip" HEAD
+
       - name: Generate SHA256 checksums
         shell: pwsh
         run: |
-          $installer = "RoleWeaver-Setup-v$env:ROLEWEAVER_VERSION.exe"
-          $portable = "RoleWeaver-Portable-v$env:ROLEWEAVER_VERSION.zip"
-          Get-FileHash "release\$installer" -Algorithm SHA256 |
-            ForEach-Object { "$($_.Hash)  $installer" } |
+          Get-ChildItem release -File |
+            Where-Object Name -ne "SHA256SUMS.txt" |
+            Sort-Object Name |
+            Get-FileHash -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash)  $(Split-Path $_.Path -Leaf)" } |
             Set-Content "release\SHA256SUMS.txt"
-          Get-FileHash "release\$portable" -Algorithm SHA256 |
-            ForEach-Object { "$($_.Hash)  $portable" } |
-            Add-Content "release\SHA256SUMS.txt"
-          $vault = "RoleWeaver-NeverwinterVault-v$env:ROLEWEAVER_VERSION.zip"
-          Get-FileHash "release\$vault" -Algorithm SHA256 |
-            ForEach-Object { "$($_.Hash)  $vault" } |
-            Add-Content "release\SHA256SUMS.txt"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: RoleWeaver-Windows-v${{ env.ROLEWEAVER_VERSION }}
-          path: |
-            release/RoleWeaver-Setup-v${{ env.ROLEWEAVER_VERSION }}.exe
-            release/RoleWeaver-Portable-v${{ env.ROLEWEAVER_VERSION }}.zip
-            release/RoleWeaver-NeverwinterVault-v${{ env.ROLEWEAVER_VERSION }}.zip
-            release/SHA256SUMS.txt
+          path: release/*
           if-no-files-found: error
 
 
@@ -112,7 +111,11 @@ jobs:
           version=$(cat VERSION)
           test "$version" = "$(cat linux/VERSION)"
           mkdir -p release
-          git archive --format=tar --prefix="RoleWeaver-v$version-Linux/" HEAD:linux | gzip > "release/RoleWeaver-v$version-Linux.tar.gz"
+          package_dir=$(mktemp -d)/RoleWeaver-v$version-Linux
+          mkdir -p "$package_dir"
+          git archive --format=tar HEAD:linux | tar -xf - -C "$package_dir"
+          git archive --format=tar HEAD src pyproject.toml LICENSE | tar -xf - -C "$package_dir"
+          tar -C "$(dirname "$package_dir")" -czf "release/RoleWeaver-v$version-Linux.tar.gz" "$(basename "$package_dir")"
           cd release
           sha256sum *.tar.gz > SHA256SUMS-Linux.txt
       - uses: actions/upload-artifact@v4

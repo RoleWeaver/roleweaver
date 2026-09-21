@@ -75,7 +75,17 @@ class AFKMixin:
                 with self._afk_lock:
                     if not self.afk or epoch != self._afk_epoch or self.stop_event.is_set():
                         return
-                raw = self.client.generate(instructions, "Character profile:\n" + self.character_prompt)
+                if hasattr(self, "request_ai"):
+                    raw = self.request_ai(
+                        instructions,
+                        "Character profile:\n" + self.character_prompt,
+                        "afk",
+                    ).text
+                else:
+                    raw = self.client.generate(
+                        instructions,
+                        "Character profile:\n" + self.character_prompt,
+                    )
             text = " ".join(str(raw or "").split()).strip()
             if not text or text == "<NO_REPLY>":
                 return

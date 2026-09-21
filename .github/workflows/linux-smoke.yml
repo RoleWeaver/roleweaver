@@ -22,6 +22,7 @@ jobs:
       - name: Run unit tests
         run: |
           .venv/bin/python -m py_compile nwn_ai_bot.py nwn_ai_gui.py roleweaver_backup.py roleweaver_storage.py roleweaver_crash.py roleweaver_pending.py roleweaver_drafts.py
+          .venv/bin/python -m compileall -q ../src
           .venv/bin/python -B -m unittest discover -s tests -v
       - name: Construct GUI under virtual X11 display
         run: xvfb-run -a .venv/bin/python -B tests/smoke_linux_gui.py

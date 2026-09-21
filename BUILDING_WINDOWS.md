@@ -12,12 +12,17 @@ The repository contains `.github/workflows/windows-release.yml`.
 2. Select **Actions**.
 3. Select **Build Windows Release**.
 4. Choose **Run workflow**.
-5. When the job completes, download the `RoleWeaver-Windows-v1.1.0` artifact.
+5. When the job completes, download the versioned `RoleWeaver-Windows` artifact.
 
 The artifact contains:
 
-- `RoleWeaver-Setup-v1.1.0.exe` — normal Windows installer.
-- `RoleWeaver-Portable-v1.1.0.zip` — portable version.
+- `RoleWeaver-Setup-vX.Y.Z.exe` — normal Windows installer.
+- `RoleWeaver-Portable-vX.Y.Z.zip` — portable version.
+- `RoleWeaver-NeverwinterVault-vX.Y.Z.zip` — Vault-oriented portable version.
+- `RoleWeaver-Developer-vX.Y.Z.zip` — complete tracked source tree for contributors.
+- `roleweaver_client-X.Y.Z-py3-none-any.whl` — reusable Python package.
+- `roleweaver_client-X.Y.Z.tar.gz` — Python source distribution.
+- `SHA256SUMS.txt` — checksums for every release asset produced by this job.
 
 ### Publish a public release
 
@@ -27,7 +32,20 @@ Create and push a version tag such as:
 v1.1.0
 ```
 
-The same workflow builds the Windows application and attaches both downloads to a GitHub Release automatically.
+The same workflow builds the Windows and Linux applications, development
+packages and checksums, then attaches the downloads to a GitHub Release.
+
+## Build the development package
+
+Install the development dependencies and build from the repository root:
+
+```powershell
+py -3 -m pip install -e ".[dev]"
+py -3 -m build
+```
+
+The wheel and source distribution are written to `dist\`. See `DEVELOPMENT.md`
+for their scope and the complete validation commands.
 
 ## Local Windows build
 

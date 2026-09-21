@@ -51,6 +51,7 @@ python -m PyInstaller `
     --contents-directory "." `
     --name "RoleWeaver" `
     --icon "assets\RoleWeaver.ico" `
+    --paths "src" `
     @addData `
     nwn_ai_gui.py
 

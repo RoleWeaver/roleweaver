@@ -32,11 +32,25 @@ Features should preserve player/DM control rather than silently taking ownership
 
 ## Development setup
 
-Install Python and dependencies using the instructions in `INSTALLATION.md`.
+Use an editable package installation so changes under `src/roleweaver` are
+available to both platform clients immediately:
+
+    py -3 -m venv .venv
+    .venv\Scripts\python.exe -m pip install -e ".[dev]"
+
+See `DEVELOPMENT.md` for Linux commands, validation, package builds and provider
+development. `ARCHITECTURE.md` describes module boundaries and migration state.
 
 Windows packaging instructions are in `BUILDING_WINDOWS.md`.
 
 ## Windows and Linux development
 
-Windows source is at the root; the self-contained Linux client is in linux/. Apply shared recovery changes to both copies of roleweaver_backup.py, roleweaver_crash.py, roleweaver_drafts.py, roleweaver_pending.py and roleweaver_storage.py. Keep platform input adapters separate. Run the root tests from the root and the Linux tests from linux/; tests use isolated temporary data.
-Keep Windows and Linux shared modules synchronized. Run both platform suites before tagging a release. Never commit personal data, API keys, recovery journals or build output.
+Windows entry points are at the root and Linux entry points are in `linux/`.
+New platform-neutral logic belongs in `src/roleweaver/`; keep operating-system
+input and desktop integration behind platform-specific adapters. Some recovery
+modules still have mirrored platform copies during the staged migration, so
+changes to those files must remain synchronized for now.
+
+Run the root tests from the root and the Linux tests from `linux/`; tests use
+isolated temporary data. Run both platform suites before tagging a release.
+Never commit personal data, API keys, recovery journals or build output.

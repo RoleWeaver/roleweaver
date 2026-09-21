@@ -20,5 +20,10 @@ for tool in "${tools[@]}"; do
     command -v "$tool" >/dev/null || { echo "Install $tool; see INSTALL_LINUX.md." >&2; exit 1; }
 done
 python3 -m venv .venv
+package_root='.'
+if [[ -f ../pyproject.toml ]]; then
+    package_root='..'
+fi
 .venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m pip install --no-deps -e "$package_root"
 echo 'Installation complete. Start with: bash start-role-weaver.sh'

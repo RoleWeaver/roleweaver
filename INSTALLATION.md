@@ -32,6 +32,9 @@ Use py -3 for the first command if your installation uses the Python launcher.
 After setup, RoleWeaver.bat also launches the client.
 Create_RoleWeaver_Desktop_Shortcut.ps1 optionally creates a source shortcut.
 Developers can build with scripts/build_windows.ps1.
+For an editable development install, architecture notes and full validation
+commands, see [DEVELOPMENT.md](DEVELOPMENT.md) and
+[ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Linux
 

@@ -1,3 +1,10 @@
+import os as _bootstrap_os
+import sys as _bootstrap_sys
+
+_bootstrap_src = _bootstrap_os.path.join(_bootstrap_os.path.dirname(__file__), "src")
+if _bootstrap_os.path.isdir(_bootstrap_src) and _bootstrap_src not in _bootstrap_sys.path:
+    _bootstrap_sys.path.insert(0, _bootstrap_src)
+
 from roleweaver_games import GAME_VERSIONS, switch_game, default_game_log, discover_game_logs, parse_nwn2
 from roleweaver_afk import AFKMixin
 import copy
@@ -16,8 +23,6 @@ from ctypes import wintypes
 from collections import deque
 from datetime import datetime
 from pathlib import Path
-import urllib.request
-import urllib.error
 import uuid
 import difflib
 import shutil
@@ -26,11 +31,6 @@ import pyautogui
 import pyperclip
 from pynput import keyboard
 from openai import OpenAI
-
-try:
-    from google import genai
-except Exception:
-    genai = None
 
 
 APP_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
@@ -1359,423 +1359,19 @@ def save_character_ai_settings(profile_path, settings):
 
 
 
-AI_PROVIDERS = {
-    "LM Studio": {
-        "requires_key": False,
-        "default_model": "auto",
-        "default_base_url": "http://127.0.0.1:1234",
-        "env_key": "",
-    },
-    "OpenAI": {
-        "requires_key": True,
-        "default_model": "gpt-5.6-luna",
-        "default_base_url": "",
-        "env_key": "OPENAI_API_KEY",
-    },
-    "Google Gemini": {
-        "requires_key": True,
-        "default_model": "gemini-3.7-flash",
-        "default_base_url": "",
-        "env_key": "GEMINI_API_KEY",
-    },
-}
-
-
-
-def normalize_lm_studio_base_url(url):
-    """Accept either http://127.0.0.1:1234 or .../v1 for LM Studio."""
-    url = (url or "http://127.0.0.1:1234").strip().rstrip("/")
-    if not url.lower().endswith("/v1"):
-        url += "/v1"
-    return url
-
-
-class OpenAICompatibleProvider:
-    def __init__(self, model, api_key, base_url=None, auto_model=False, use_chat_completions=False):
-        kwargs = {"api_key": api_key or "lm-studio"}
-        if base_url:
-            kwargs["base_url"] = base_url
-
-        self.client = OpenAI(**kwargs)
-        self.model = (model or "").strip()
-        self.use_chat_completions = bool(use_chat_completions)
-
-        if auto_model or not self.model or self.model.casefold() == "auto":
-            models = self._list_model_ids()
-            if not models:
-                raise RuntimeError(
-                    "Connected to the AI server, but no loaded models were reported. "
-                    "In LM Studio, load a model and make sure the Local Server is running."
-                )
-            self.model = models[0]
-
-    def _list_model_ids(self):
-        response = self.client.models.list()
-        data = getattr(response, "data", None)
-
-        if data is None:
-            try:
-                data = list(response)
-            except (TypeError, AttributeError):
-                data = []
-
-        model_ids = []
-        for item in data or []:
-            model_id = getattr(item, "id", None)
-            if model_id:
-                model_ids.append(str(model_id))
-        return model_ids
-
-    def generate(self, instructions, prompt):
-        if self.use_chat_completions:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": instructions},
-                    {"role": "user", "content": prompt},
-                ],
-            )
-            choices = getattr(response, "choices", None) or []
-            if not choices:
-                return ""
-            message = getattr(choices[0], "message", None)
-            return (getattr(message, "content", "") or "").strip()
-
-        response = self.client.responses.create(
-            model=self.model,
-            instructions=instructions,
-            input=prompt,
-        )
-        return (response.output_text or "").strip()
-
-    def test(self):
-        models = self._list_model_ids()
-        if models:
-            return f"Connected. {len(models)} model(s) available. Using {self.model}."
-
-        if self.model and self.model.casefold() != "auto" and self.use_chat_completions:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": "Reply with exactly: OK"}],
-                max_tokens=8,
-            )
-            choices = getattr(response, "choices", None) or []
-            if choices:
-                return f"Connected. Using {self.model}."
-
-        raise RuntimeError(
-            "The server responded, but no models were available. "
-            "Load a model in LM Studio and start the Local Server."
-        )
-
-
-class LMStudioProvider(OpenAICompatibleProvider):
-    """LM Studio provider with native REST model discovery/loading."""
-
-    def __init__(self, model, base_url):
-        self.server_root = (base_url or "http://127.0.0.1:1234").strip().rstrip("/")
-        if self.server_root.lower().endswith("/v1"):
-            self.server_root = self.server_root[:-3].rstrip("/")
-
-        requested_model = (model or "auto").strip()
-
-        # Discover downloaded models and ensure one is actually loaded.
-        selected_model = self._prepare_model(requested_model)
-
-        super().__init__(
-            model=selected_model,
-            api_key="lm-studio",
-            base_url=normalize_lm_studio_base_url(self.server_root),
-            auto_model=False,
-            use_chat_completions=True,
-        )
-
-    def _native_request(self, method, path, body=None, timeout=120):
-        url = self.server_root + path
-        data = None
-        headers = {"Content-Type": "application/json"}
-        if body is not None:
-            data = json.dumps(body).encode("utf-8")
-
-        request = urllib.request.Request(url, data=data, headers=headers, method=method)
-        try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
-                raw = response.read().decode("utf-8", errors="replace")
-                return json.loads(raw) if raw.strip() else {}
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"LM Studio API returned HTTP {exc.code}: {detail}") from exc
-        except urllib.error.URLError as exc:
-            raise RuntimeError(
-                f"Could not connect to LM Studio at {self.server_root}. "
-                "Make sure the Local Server is running."
-            ) from exc
-
-    def _prepare_model(self, requested_model):
-        try:
-            payload = self._native_request("GET", "/api/v1/models", timeout=15)
-            models = payload.get("models") or []
-        except Exception:
-            # Older LM Studio versions may not support the native v1 endpoint.
-            # Fall back to the OpenAI model list, but require manual loading.
-            temp = OpenAI(
-                api_key="lm-studio",
-                base_url=normalize_lm_studio_base_url(self.server_root),
-            )
-            response = temp.models.list()
-            data = getattr(response, "data", None) or []
-            ids = [str(getattr(item, "id", "")) for item in data if getattr(item, "id", None)]
-            if requested_model.casefold() == "auto":
-                if not ids:
-                    raise RuntimeError(
-                        "No LM Studio models are available. Download and load a model in LM Studio first."
-                    )
-                return ids[0]
-            return requested_model
-
-        llms = [m for m in models if (m.get("type") or "").casefold() == "llm"]
-        if not llms:
-            raise RuntimeError(
-                "LM Studio is running, but no downloaded LLMs were found. "
-                "Download a chat/instruct model in LM Studio first."
-            )
-
-        selected = None
-        if requested_model.casefold() == "auto":
-            # Prefer an already-loaded model, otherwise use the first local LLM.
-            selected = next((m for m in llms if m.get("loaded_instances")), llms[0])
-        else:
-            wanted = requested_model.casefold()
-            for m in llms:
-                candidates = {
-                    str(m.get("key") or "").casefold(),
-                    str(m.get("display_name") or "").casefold(),
-                    str(m.get("name") or "").casefold(),
-                }
-                if wanted in candidates:
-                    selected = m
-                    break
-            if selected is None:
-                # It may be a valid identifier exposed only by compatibility mode.
-                return requested_model
-
-        model_key = str(selected.get("key") or selected.get("name") or "").strip()
-        if not model_key:
-            raise RuntimeError("LM Studio returned a model without a usable model identifier.")
-
-        loaded_instances = selected.get("loaded_instances") or []
-        if not loaded_instances:
-            print(f"[LM STUDIO] Loading model: {model_key} ...")
-            result = self._native_request(
-                "POST",
-                "/api/v1/models/load",
-                body={"model": model_key},
-                timeout=180,
-            )
-            if (result.get("status") or "").casefold() != "loaded":
-                raise RuntimeError(
-                    f"LM Studio did not confirm that model '{model_key}' was loaded."
-                )
-            print(f"[LM STUDIO] Model loaded: {model_key}")
-        else:
-            print(f"[LM STUDIO] Model already loaded: {model_key}")
-
-        return model_key
-
-    def test(self):
-        # A real tiny inference test catches the difference between a model
-        # merely being listed/downloaded and actually being usable.
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": "Reply with exactly: OK"}],
-            max_tokens=8,
-        )
-        choices = getattr(response, "choices", None) or []
-        if not choices:
-            raise RuntimeError("LM Studio connected, but the model returned no test response.")
-        return f"Connected. Model loaded and responding: {self.model}."
-
-
-class GeminiProvider:
-    # Current text-oriented Flash / Flash-Lite models. Availability and free-tier
-    # quotas are determined by the user's Google AI project, so unavailable
-    # models are skipped automatically.
-    FALLBACK_MODELS = [
-        "gemini-3.7-flash",
-        "gemini-3.6-flash",
-        "gemini-3.5-flash",
-        "gemini-3.5-flash-lite",
-        "gemini-3.1-flash-lite",
-        "gemini-2.5-flash",
-        "gemini-2.5-flash-lite",
-    ]
-
-    def __init__(self, model, api_key):
-        if genai is None:
-            raise RuntimeError(
-                "Google Gemini support is not installed. "
-                "Run the launcher again to install dependencies."
-            )
-        if not api_key:
-            raise RuntimeError("A Google Gemini API key is required.")
-
-        self.client = genai.Client(api_key=api_key)
-        self.model = (model or "gemini-3.7-flash").strip()
-        self.last_successful_model = None
-
-    def _candidate_models(self):
-        requested = self.model.strip()
-
-        if requested.casefold() in ("auto", "auto-free", "free-auto"):
-            ordered = list(self.FALLBACK_MODELS)
-        else:
-            ordered = [requested] + self.FALLBACK_MODELS
-
-        seen = set()
-        result = []
-        for name in ordered:
-            key = name.casefold()
-            if name and key not in seen:
-                seen.add(key)
-                result.append(name)
-
-        # Prefer the model that most recently succeeded during this session.
-        if self.last_successful_model in result:
-            result.remove(self.last_successful_model)
-            result.insert(0, self.last_successful_model)
-
-        return result
-
-    @staticmethod
-    def _error_code(exc):
-        for attr in ("status_code", "code"):
-            value = getattr(exc, attr, None)
-            try:
-                if callable(value):
-                    value = value()
-            except Exception:
-                value = None
-
-            if isinstance(value, int):
-                return value
-
-            if value is not None:
-                text = str(value)
-                m = re.search(r"\b(400|403|404|408|409|429|500|502|503|504)\b", text)
-                if m:
-                    return int(m.group(1))
-
-        text = str(exc)
-        m = re.search(r"\b(400|403|404|408|409|429|500|502|503|504)\b", text)
-        return int(m.group(1)) if m else None
-
-    @classmethod
-    def _should_try_another_model(cls, exc):
-        code = cls._error_code(exc)
-        text = str(exc).casefold()
-
-        # Capacity/rate-limit errors are the main reason for fallback.
-        if code in (408, 429, 500, 502, 503, 504):
-            return True
-
-        capacity_terms = (
-            "resource_exhausted",
-            "resource exhausted",
-            "unavailable",
-            "overloaded",
-            "busy",
-            "capacity",
-            "rate limit",
-            "rate_limit",
-            "too many requests",
-            "temporarily unavailable",
-        )
-        if any(term in text for term in capacity_terms):
-            return True
-
-        # A particular model may not be available to the user's project/free tier.
-        model_access_terms = (
-            "model not found",
-            "not found for api version",
-            "not supported for generatecontent",
-            "does not have access",
-            "permission denied",
-            "not available for",
-        )
-        if code in (400, 403, 404) and any(term in text for term in model_access_terms):
-            return True
-
-        return False
-
-    def _generate_with_fallback(self, contents):
-        candidates = self._candidate_models()
-        failures = []
-
-        for index, model_name in enumerate(candidates):
-            try:
-                if len(candidates) > 1:
-                    print(f"[GEMINI] Trying {model_name}...")
-                response = self.client.models.generate_content(
-                    model=model_name,
-                    contents=contents,
-                )
-                text = (getattr(response, "text", "") or "").strip()
-
-                self.last_successful_model = model_name
-                self.model = model_name
-
-                if index > 0:
-                    print(f"[GEMINI] Switched to available model: {model_name}")
-                return text
-
-            except Exception as exc:
-                failures.append(f"{model_name}: {exc}")
-
-                if not self._should_try_another_model(exc):
-                    raise
-
-                if index < len(candidates) - 1:
-                    print(
-                        f"[GEMINI] {model_name} unavailable/busy. "
-                        "Trying another Gemini model..."
-                    )
-
-        detail = "\n".join(failures[-3:])
-        raise RuntimeError(
-            "No Gemini fallback model was available for this request. "
-            "The project may be rate-limited, all candidate models may be busy, "
-            "or the free-tier quota may be exhausted.\n" + detail
-        )
-
-    def generate(self, instructions, prompt):
-        contents = instructions + "\n\n" + prompt
-        return self._generate_with_fallback(contents)
-
-    def test(self):
-        text = self._generate_with_fallback("Reply with exactly: OK")
-        if not text:
-            raise RuntimeError("Gemini connected, but returned no text.")
-        return f"Connected to Gemini. Working model: {self.model}."
-
-
-def create_ai_provider(settings, api_key=""):
-    provider = settings.get("ai_provider", "OpenAI")
-    model = settings.get("model", "").strip()
-
-    if provider == "LM Studio":
-        base_url = settings.get("lm_studio_base_url", "http://127.0.0.1:1234")
-        settings["lm_studio_base_url"] = normalize_lm_studio_base_url(base_url)
-        return LMStudioProvider(
-            model=model,
-            base_url=base_url,
-        )
-    if provider == "Google Gemini":
-        return GeminiProvider(model=model, api_key=api_key)
-    if provider == "OpenAI":
-        return OpenAICompatibleProvider(model=model, api_key=api_key)
-    raise RuntimeError(f"Unknown AI provider: {provider}")
-
-
+from roleweaver.ai import (
+    AI_PROVIDERS,
+    AIRequest,
+    AIRequestPurpose,
+    AIResult,
+    AIUsage,
+    GeminiProvider,
+    LMStudioProvider,
+    OpenAICompatibleProvider,
+    coerce_ai_result,
+    create_ai_provider,
+    normalize_lm_studio_base_url,
+)
 
 CAMPAIGNS_DIR = APP_DIR / "Campaigns"
 
@@ -2301,6 +1897,36 @@ class NWNAIBot(AFKMixin):
         # Exact content from the most recent reply-generation request.
         self.last_ai_context_display = ""
         self.last_ai_context_version = 0
+
+        # The complete normalized result from the newest AI request. Keeping
+        # provider metadata here enables usage reporting without coupling the
+        # conversation engine to an individual SDK.
+        self.last_ai_result = None
+
+    def request_ai(self, instructions, prompt, purpose=AIRequestPurpose.REPLY):
+        """Run one provider-neutral request and return a structured result."""
+        if not isinstance(purpose, AIRequestPurpose):
+            purpose = AIRequestPurpose(purpose)
+        request = AIRequest(
+            instructions=instructions,
+            prompt=prompt,
+            purpose=purpose,
+        )
+        started = time.perf_counter()
+        raw = self.client.generate(request)
+        result = coerce_ai_result(
+            raw,
+            provider=getattr(
+                self.client,
+                "provider_name",
+                self.settings.get("ai_provider", ""),
+            ),
+            model=getattr(self.client, "model", self.settings.get("model", "")),
+            purpose=purpose,
+            duration_seconds=time.perf_counter() - started,
+        )
+        self.last_ai_result = result
+        return result
 
     @storage.synchronized
     def add_system_event(self, line):
@@ -3830,7 +3456,11 @@ class NWNAIBot(AFKMixin):
             if parsed is None:
                 instructions, prompt = view._summary_prompt(batch["events"])
                 with self.request_lock:
-                    raw = self.client.generate(instructions, prompt)
+                    raw = self.request_ai(
+                        instructions,
+                        prompt,
+                        AIRequestPurpose.SUMMARY,
+                    ).text
                 parsed = extract_json_object(raw)
                 if not isinstance(parsed, dict) or not isinstance(parsed.get("summary"), str):
                     raise ValueError("Invalid summary response; pending events retained")
@@ -3942,10 +3572,14 @@ Aim for a {length_guidance} response and keep it under {target_characters} chara
         with self.request_lock:
             try:
                 print("[AI] Generating...")
-                started = time.perf_counter()
-                reply = self.client.generate(instructions, prompt)
-                self.last_generation_seconds = time.perf_counter() - started
-                self.last_generation_model = getattr(self.client, "model", self.settings.get("model", ""))
+                result = self.request_ai(
+                    instructions,
+                    prompt,
+                    AIRequestPurpose.REPLY,
+                )
+                reply = result.text
+                self.last_generation_seconds = result.duration_seconds
+                self.last_generation_model = result.model
                 self.last_generation_timestamp = time.time()
                 if self.settings.get("generation_timing", True):
                     print(
@@ -4011,7 +3645,11 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
         with self.request_lock:
             try:
                 print(f"[AI] Generating {count} candidate replies...")
-                raw=self.client.generate(instructions,prompt)
+                raw = self.request_ai(
+                    instructions,
+                    prompt,
+                    AIRequestPurpose.CANDIDATES,
+                ).text
                 parsed=extract_json_object(raw)
                 values=parsed.get("candidates",[]) if isinstance(parsed,dict) else []
                 candidates=[]

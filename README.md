@@ -121,6 +121,16 @@ See **AUTOMATIC_LOG_DETECTION.md** for the automatic detection and adaptive-pars
 - **CHARACTER_PROFILE_GUIDE.md** — character profiles
 - **INSTALLATION.md** — source installation
 - **BUILDING_WINDOWS.md** — Windows builds and releases
+- **DEVELOPMENT.md** — editable setup, tests and development packages
+- **ARCHITECTURE.md** — package boundaries and contributor-oriented design
+
+## Development package
+
+Shared platform-neutral code lives in the installable `src/roleweaver` package.
+Every release workflow builds a Python wheel, source distribution and complete
+developer-source ZIP in addition to end-user packages. Start with
+`DEVELOPMENT.md`; contributions should put new shared behavior in the package
+instead of duplicating it between the Windows and Linux entry points.
 
 ## Privacy and API keys
 
