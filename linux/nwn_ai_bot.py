@@ -2081,7 +2081,15 @@ class NWNAIBot(AFKMixin):
             source_language=source,
             target_language=self.settings.get("user_language", "English"),
             direction=TranslationDirection.INCOMING,
-            messages=tuple(TranslationMessage(str(row["id"]), row["message"], row["speaker"], row["channel"]) for row in rows),
+            messages=tuple(
+                TranslationMessage(
+                    id=str(row["id"]),
+                    text=row["message"],
+                    speaker=row["speaker"],
+                    channel=row["channel"],
+                )
+                for row in rows
+            ),
             protected_terms=self._protected_translation_terms(),
         )
         try:

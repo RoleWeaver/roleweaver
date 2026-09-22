@@ -45,9 +45,15 @@ Push-Location linux
 py -3 -m unittest discover -s tests -v
 Pop-Location
 py -3 -m ruff check
+py -3 scripts/check_source_integrity.py
 ```
 
 On Linux, use `.venv/bin/python` in place of `py -3`.
+
+`check_source_integrity.py` validates UTF-8 source, catches common mojibake,
+and compares shared Windows/Linux bot functions as Python syntax trees. Its
+exception list covers platform-specific input and startup functions; review
+that list if a deliberate platform difference is added.
 
 GUI, input, packaging and release changes also require the manual checks in the
 current `TESTING_*.md` and `PUBLIC_RELEASE_CHECKLIST.md` documents.
