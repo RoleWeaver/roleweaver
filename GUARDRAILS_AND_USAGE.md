@@ -13,8 +13,18 @@ Open the **Guardrails & Usage** tab in the lower application panel to:
 - set maximum input and output sizes;
 - review request, token and blocked-request totals for the current session,
   last 24 hours, 7 days or 30 days;
-- switch the chart among requests, reported tokens and estimated cost; and
+- switch the chart among Role Weaver requests, actual API calls, reported
+  tokens and estimated cost; and
 - enter provider pricing in USD per million input and output tokens.
+
+The tab contains three pages:
+
+- **Overview** shows status, request totals and request/token/cost charts.
+- **Policy** controls each policy category for all requests or a specific
+  purpose: replies, candidates, summaries, AFK, translations or connection
+  tests.
+- **Events** shows recent policy decisions without storing the text that caused
+  them.
 
 Saved guardrail limits take effect the next time **Start** is pressed. Pricing
 changes affect future requests; existing usage records retain the estimate made
@@ -29,8 +39,38 @@ unknown and is never silently treated as zero.
 
 The client checks prompt size, invalid control characters, common attempts to
 override the roleplay instructions, out-of-character model disclosures and
-possible instruction or API-key leakage. A blocked input is not sent to the AI
-provider. A blocked output is not returned for use as dialogue.
+possible instruction or API-key leakage. It also detects common forms of
+personal information, toxic language, direct harassment or threats, explicit
+sexual content and graphic violence. The content detectors are deliberately
+lightweight local rules rather than a remote moderation service; they avoid an
+additional disclosure of RP text and can be extended with custom terms and
+regular expressions. Custom policy fields accept up to 100 entries; terms are
+limited to 100 characters and regular expressions to 256 characters. Unsafe
+nested repetition is rejected.
+
+Every category has one of four actions:
+
+- **Off** ignores the category.
+- **Warn** permits the text but records a policy event.
+- **Block** stops the input or output.
+- **Replace** redacts matching input material or substitutes the configured
+  safe output reply.
+
+Purpose-specific policies inherit the Default policy until overridden. By
+default, instruction and secret leakage is blocked, model disclosure is
+replaced, and RP-sensitive content categories warn rather than block.
+Policy changes apply to new requests immediately. Input and output size-limit
+changes apply after the next **Start**.
+
+When output retry is enabled, Role Weaver asks the configured provider for one
+fresh response after a Block or Replace decision. The retry instruction names
+only the policy category and never repeats the rejected response. If the retry
+also fails, the configured Block or Replace action is applied. Both provider
+calls are included in token and cost estimates.
+
+A blocked input is not sent to the AI provider. A blocked output is not returned
+for use as dialogue. Connection tests now use the same guarded execution and
+usage-recording path as other AI requests.
 
 If the Guardrails AI library cannot initialize, the page reports **DEGRADED**
 and Role Weaver retains a small built-in safety fallback. Packaged releases and
@@ -46,6 +86,10 @@ Usage records are stored locally in `RoleWeaver_Data/usage.sqlite3` and retained
 for 30 days. Records contain timestamps, provider and model names, request
 purpose, success or failure, duration, reported token counts, guardrail action,
 error type and an optional estimated cost.
+
+Policy event rows contain only timestamp, request purpose, input/output
+direction, category, action and backend. They contain no reason text or matched
+content.
 
 The usage database does **not** store prompts, generated replies, Tells,
 translations, character instructions or API keys. Deleting `usage.sqlite3`

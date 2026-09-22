@@ -21,3 +21,7 @@ AI usage metadata is retained locally for 30 days in
 purpose, timing, reported token counts, guardrail outcomes, error types and
 optional cost estimates. It does not contain prompt text, generated replies,
 Tells, translations, character instructions or API keys.
+
+Guardrail event history uses the same database and retention period. It stores
+only time, request purpose, input/output direction, policy category, selected
+action and backend. Matched text and detailed failure reasons are not stored.

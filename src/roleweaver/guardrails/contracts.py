@@ -20,10 +20,17 @@ class GuardrailResult:
     reason: str = ""
     text: str = ""
     backend: str = ""
+    categories: tuple[str, ...] = ()
+    category_actions: tuple[tuple[str, str], ...] = ()
+    direction: str = ""
 
     @property
     def allowed(self) -> bool:
-        return self.action in {GuardrailAction.PASS, GuardrailAction.WARN}
+        return self.action in {
+            GuardrailAction.PASS,
+            GuardrailAction.WARN,
+            GuardrailAction.REPLACE,
+        }
 
 
 class GuardrailBackend(Protocol):
@@ -38,4 +45,3 @@ class GuardrailBackend(Protocol):
 
 class GuardrailViolation(RuntimeError):
     """A request or result was rejected by the configured guardrail backend."""
-

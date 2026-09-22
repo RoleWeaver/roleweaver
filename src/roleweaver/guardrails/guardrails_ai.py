@@ -14,44 +14,39 @@ os.environ.setdefault("OTEL_SDK_DISABLED", "true")
 os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
 
 _SDK_LOCK = threading.Lock()
-_SDK_COMPONENTS: tuple[Any, Any, Any, str] | None = None
+_SDK_COMPONENTS: tuple[Any, Any, str] | None = None
+_ACTION_PRIORITY = {"warn": 1, "replace": 2, "block": 3}
 
 
-def _load_sdk() -> tuple[Any, Any, Any, str]:
-    """Load Guardrails and register Role Weaver's validator once per process."""
+def _load_sdk() -> tuple[Any, Any, str]:
+    """Load Guardrails once per process without enabling remote telemetry."""
 
     global _SDK_COMPONENTS
     with _SDK_LOCK:
-        if _SDK_COMPONENTS is not None:
-            return _SDK_COMPONENTS
+        if _SDK_COMPONENTS is None:
+            from guardrails import Guard
+            from guardrails_ai.regex_match import RegexMatch
 
-        from guardrails import Guard
-        from guardrails.validators import FailResult, PassResult, Validator, register_validator
-        from guardrails_ai.regex_match import RegexMatch
-
-        @register_validator(name="roleweaver/client-dialogue-policy", data_type="string")
-        class DialoguePolicy(Validator):
-            def _validate(self, value, metadata):
-                if metadata["direction"] == "input":
-                    reason = policy.input_reason(value)
-                else:
-                    reason = policy.output_reason(value, metadata.get("instructions", ""))
-                return FailResult(error_message=reason) if reason else PassResult()
-
-        _SDK_COMPONENTS = (Guard, RegexMatch, DialoguePolicy, version("guardrails-ai"))
+            _SDK_COMPONENTS = (Guard, RegexMatch, version("guardrails-ai"))
         return _SDK_COMPONENTS
 
 
 class GuardrailsAIBackend:
     name = "Guardrails AI"
 
-    def __init__(self, input_limit: int = 50000, output_limit: int = 10000) -> None:
+    def __init__(
+        self,
+        input_limit: int = 50000,
+        output_limit: int = 10000,
+        settings: dict[str, Any] | None = None,
+    ) -> None:
+        self.settings = settings or {}
         self.input_limit = max(1, int(input_limit))
         self.output_limit = max(1, int(output_limit))
         self.local = threading.local()
         self.error = ""
         try:
-            self.Guard, self.RegexMatch, self.DialoguePolicy, self.version = _load_sdk()
+            self.Guard, self.RegexMatch, self.version = _load_sdk()
         except Exception as exc:
             self.error = f"Guardrails AI is unavailable: {type(exc).__name__}: {exc}"
             self.version = ""
@@ -68,45 +63,72 @@ class GuardrailsAIBackend:
                 self.RegexMatch(
                     regex=rf"\A(?=[\s\S]*\S)[^\x00-\x08\x0b\x0c\x0e-\x1f\x7f]{{1,{limit}}}\Z",
                     on_fail="noop",
-                ),
-                self.DialoguePolicy(on_fail="noop"),
+                )
             )
             setattr(self.local, direction, guard)
         return guard
 
     def _validate(self, text: str, direction: str, context: dict[str, Any]) -> GuardrailResult:
-        if self.error:
-            limit = self.input_limit if direction == "input" else self.output_limit
-            reason = (
-                policy.input_reason(text)
-                if direction == "input"
-                else policy.output_reason(text, context.get("instructions", ""))
+        sdk_format_failed = False
+        if not self.error:
+            try:
+                outcome = self._guard(direction).validate(text, num_reasks=0)
+                sdk_format_failed = not outcome.validation_passed
+            finally:
+                guard = getattr(self.local, direction, None)
+                if guard is not None:
+                    guard.history.clear()
+
+        matches = policy.evaluate(
+            text,
+            direction,
+            instructions=context.get("instructions", ""),
+            input_limit=self.input_limit,
+            output_limit=self.output_limit,
+            custom_terms=self.settings.get("guardrail_custom_terms", ""),
+            custom_regex=self.settings.get("guardrail_custom_regex", ""),
+        )
+        if sdk_format_failed and not any(match.category == "size_format" for match in matches):
+            matches.insert(
+                0,
+                policy.PolicyMatch("size_format", "Guardrails AI rejected the text format"),
             )
-            if not str(text or "").strip() or len(text) > limit or reason:
-                return GuardrailResult(
-                    GuardrailAction.BLOCK,
-                    reason or f"{direction.title()} exceeds the configured size limit.",
-                    backend="Built-in safety fallback",
+
+        purpose = str(context.get("purpose", "reply"))
+        active = [
+            (match, policy.resolve_action(self.settings, purpose, match.category))
+            for match in matches
+        ]
+        active = [(match, action) for match, action in active if action != "off"]
+        backend = self.name if not self.error else "Built-in safety fallback"
+        if not active:
+            return GuardrailResult(text=text, backend=backend, direction=direction)
+
+        selected_action = max(active, key=lambda item: _ACTION_PRIORITY[item[1]])[1]
+        action = GuardrailAction(selected_action)
+        categories = tuple(dict.fromkeys(match.category for match, _action in active))
+        reasons = "; ".join(dict.fromkeys(match.reason for match, _action in active))
+        replacement = text
+        if action == GuardrailAction.REPLACE:
+            replacement_matches = [
+                match for match, match_action in active if match_action == "replace"
+            ]
+            if direction == "input":
+                replacement = policy.redact(text, replacement_matches)
+            else:
+                replacement = str(
+                    self.settings.get("guardrail_replacement_text", policy.FALLBACK)
+                    or policy.FALLBACK
                 )
-            return GuardrailResult(text=text, backend="Built-in safety fallback")
-        try:
-            guard = self._guard(direction)
-            outcome = guard.validate(
-                text,
-                metadata={"direction": direction, **context},
-                num_reasks=0,
-            )
-            if outcome.validation_passed:
-                return GuardrailResult(text=text, backend=self.name)
-            return GuardrailResult(
-                GuardrailAction.BLOCK,
-                f"Guardrails AI declined {direction} dialogue.",
-                backend=self.name,
-            )
-        finally:
-            guard = getattr(self.local, direction, None)
-            if guard is not None:
-                guard.history.clear()
+        return GuardrailResult(
+            action=action,
+            reason=reasons,
+            text=replacement,
+            backend=backend,
+            categories=categories,
+            category_actions=tuple((match.category, action) for match, action in active),
+            direction=direction,
+        )
 
     def validate_input(self, text: str, context: dict[str, Any]) -> GuardrailResult:
         return self._validate(text, "input", context)

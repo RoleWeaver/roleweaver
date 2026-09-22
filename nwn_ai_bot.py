@@ -16,7 +16,13 @@ from roleweaver.conversation import (
 from roleweaver.config import SettingsStore, default_settings
 from roleweaver.games import GAME_VERSIONS, default_game_log, discover_game_logs, switch_game
 from roleweaver.paths import RuntimePaths
-from roleweaver.guardrails import GuardrailsAIBackend
+from roleweaver.guardrails import (
+    ACTION_VALUES,
+    CATEGORY_LABELS,
+    DEFAULT_ACTIONS,
+    GuardrailsAIBackend,
+    validate_custom_patterns,
+)
 from roleweaver_afk import AFKMixin
 import copy
 from roleweaver_pending import SummaryJournal

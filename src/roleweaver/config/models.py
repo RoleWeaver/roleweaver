@@ -51,6 +51,12 @@ class RoleWeaverSettings(TypedDict, total=False):
     guardrail_backend: str
     guardrail_input_max_characters: int
     guardrail_output_max_characters: int
+    guardrail_default_policies: dict[str, str]
+    guardrail_purpose_policies: dict[str, dict[str, str]]
+    guardrail_custom_terms: str
+    guardrail_custom_regex: str
+    guardrail_replacement_text: str
+    guardrail_retry_output_once: bool
     usage_input_cost_per_million: float | None
     usage_output_cost_per_million: float | None
 
@@ -101,6 +107,24 @@ def default_settings(default_log_path: str, *, keyboard_method: str) -> RoleWeav
         "guardrail_backend": "guardrails_ai",
         "guardrail_input_max_characters": 50000,
         "guardrail_output_max_characters": 10000,
+        "guardrail_default_policies": {
+            "size_format": "block",
+            "instruction_override": "block",
+            "secret_request": "block",
+            "instruction_leak": "block",
+            "model_disclosure": "replace",
+            "pii": "warn",
+            "toxicity": "warn",
+            "harassment": "warn",
+            "sexual_content": "warn",
+            "graphic_violence": "warn",
+            "custom": "block",
+        },
+        "guardrail_purpose_policies": {},
+        "guardrail_custom_terms": "",
+        "guardrail_custom_regex": "",
+        "guardrail_replacement_text": "Let us keep to matters of this world. What do you need?",
+        "guardrail_retry_output_once": True,
         "usage_input_cost_per_million": None,
         "usage_output_cost_per_million": None,
     }

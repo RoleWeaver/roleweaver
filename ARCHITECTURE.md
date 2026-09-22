@@ -70,6 +70,12 @@ Usage telemetry is stored locally in `RoleWeaver_Data/usage.sqlite3` with a
 guardrail actions and optional cost estimates. It never stores prompt or reply
 text. See `GUARDRAILS_AND_USAGE.md` for the user and extension contract.
 
+Policy configuration consists of default category actions plus sparse
+per-purpose overrides. `off`, `warn`, `block`, and `replace` are resolved inside
+the backend, while `AIExecutionService` owns the single guarded output retry and
+token aggregation. Privacy-safe guardrail events use a separate SQLite table
+containing policy metadata only.
+
 ## Conversation boundary
 
 Game logs are normalized through `roleweaver.conversation` before they reach

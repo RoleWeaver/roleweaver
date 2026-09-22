@@ -12,8 +12,13 @@ from roleweaver.ai import (
     AIUsage,
     UsageStore,
 )
-from roleweaver.guardrails import GuardrailAction, GuardrailResult, GuardrailViolation
-from roleweaver.guardrails.policy import input_reason, output_reason
+from roleweaver.guardrails import (
+    GuardrailAction,
+    GuardrailResult,
+    GuardrailsAIBackend,
+    GuardrailViolation,
+)
+from roleweaver.guardrails.policy import input_reason, output_reason, validate_custom_patterns
 
 
 class PassingGuardrails:
@@ -31,12 +36,41 @@ class PassingGuardrails:
 
 class BlockingInputGuardrails(PassingGuardrails):
     def validate_input(self, text, context):
-        return GuardrailResult(GuardrailAction.BLOCK, "blocked in test", backend=self.name)
+        return GuardrailResult(
+            GuardrailAction.BLOCK,
+            "blocked in test",
+            backend=self.name,
+            categories=("instruction_override",),
+            direction="input",
+        )
 
 
 class BlockingOutputGuardrails(PassingGuardrails):
     def validate_output(self, text, context):
-        return GuardrailResult(GuardrailAction.BLOCK, "blocked output", backend=self.name)
+        return GuardrailResult(
+            GuardrailAction.BLOCK,
+            "blocked output",
+            backend=self.name,
+            categories=("instruction_leak",),
+            direction="output",
+        )
+
+
+class RetryThenPassGuardrails(PassingGuardrails):
+    def __init__(self):
+        self.output_calls = 0
+
+    def validate_output(self, text, context):
+        self.output_calls += 1
+        if self.output_calls == 1:
+            return GuardrailResult(
+                GuardrailAction.BLOCK,
+                "retry this output",
+                backend=self.name,
+                categories=("model_disclosure",),
+                direction="output",
+            )
+        return GuardrailResult(text=text, backend=self.name, direction="output")
 
 
 class FakeProvider:
@@ -110,7 +144,12 @@ class GuardrailsUsageTests(unittest.TestCase):
     def test_blocked_output_preserves_returned_token_counts(self):
         provider = FakeProvider()
         store = UsageStore(self.database)
-        service = AIExecutionService(provider, {}, store, BlockingOutputGuardrails())
+        service = AIExecutionService(
+            provider,
+            {"guardrail_retry_output_once": False},
+            store,
+            BlockingOutputGuardrails(),
+        )
 
         with self.assertRaises(GuardrailViolation):
             service.generate(self.request)
@@ -120,6 +159,81 @@ class GuardrailsUsageTests(unittest.TestCase):
         self.assertEqual(report["blocked"], 1)
         self.assertEqual(report["total_tokens"], 125)
 
+    def test_rejected_output_is_retried_once_and_usage_is_combined(self):
+        provider = FakeProvider()
+        store = UsageStore(self.database)
+        service = AIExecutionService(provider, {}, store, RetryThenPassGuardrails())
+
+        result = service.generate(self.request)
+        report = store.report("session", session=service.session)
+        events = store.guardrail_events("session", session=service.session)
+
+        self.assertEqual(result.text, "A safe reply.")
+        self.assertEqual(provider.calls, 2)
+        self.assertEqual(report["total_tokens"], 250)
+        self.assertEqual(report["provider_calls"], 2)
+        self.assertEqual(report["blocked"], 1)
+        self.assertEqual(events[0]["category"], "model_disclosure")
+        self.assertNotIn("retry this output", repr(events))
+
+    def test_purpose_override_and_replacement_are_applied(self):
+        settings = {
+            "guardrail_default_policies": {"model_disclosure": "block"},
+            "guardrail_purpose_policies": {"reply": {"model_disclosure": "replace"}},
+            "guardrail_replacement_text": "A discreet in-character reply.",
+        }
+        backend = GuardrailsAIBackend(settings=settings)
+
+        result = backend.validate_output(
+            "As an AI language model, I cannot comply.",
+            {"purpose": "reply", "instructions": "Remain in character."},
+        )
+
+        self.assertEqual(result.action, GuardrailAction.REPLACE)
+        self.assertEqual(result.text, "A discreet in-character reply.")
+        self.assertEqual(result.categories, ("model_disclosure",))
+
+    def test_custom_terms_pii_and_invalid_expressions(self):
+        backend = GuardrailsAIBackend(
+            settings={
+                "guardrail_custom_terms": "forbidden phrase",
+                "guardrail_default_policies": {"pii": "warn", "custom": "block"},
+            }
+        )
+
+        pii = backend.validate_input(
+            "Write to test@example.com.",
+            {"purpose": "reply", "instructions": ""},
+        )
+        custom = backend.validate_input(
+            "Use the forbidden phrase here.",
+            {"purpose": "reply", "instructions": ""},
+        )
+
+        self.assertEqual(pii.action, GuardrailAction.WARN)
+        self.assertTrue(pii.allowed)
+        self.assertEqual(custom.action, GuardrailAction.BLOCK)
+        self.assertTrue(validate_custom_patterns("[unterminated"))
+
+    def test_warning_reaches_provider_and_creates_content_free_event(self):
+        provider = FakeProvider()
+        store = UsageStore(self.database)
+        settings = {"guardrail_default_policies": {"pii": "warn"}}
+        service = AIExecutionService(provider, settings, store)
+        request = AIRequest(
+            instructions="Remain in character.",
+            prompt="The courier wrote to test@example.com.",
+            purpose=AIRequestPurpose.REPLY,
+        )
+
+        service.generate(request)
+        events = store.guardrail_events("session", session=service.session)
+
+        self.assertEqual(provider.calls, 1)
+        self.assertEqual(events[0]["category"], "pii")
+        self.assertEqual(events[0]["action"], "warn")
+        self.assertNotIn("test@example.com", repr(events))
+
     def test_usage_database_contains_no_prompt_or_response_content(self):
         store = UsageStore(self.database)
         service = AIExecutionService(FakeProvider(), {}, store, PassingGuardrails())
@@ -128,10 +242,14 @@ class GuardrailsUsageTests(unittest.TestCase):
         with closing(sqlite3.connect(self.database)) as database:
             columns = [row[1] for row in database.execute("PRAGMA table_info(requests)")]
             serialized = repr(database.execute("SELECT * FROM requests").fetchall())
+            event_columns = [
+                row[1] for row in database.execute("PRAGMA table_info(guardrail_events)")
+            ]
 
         self.assertFalse({"prompt", "instructions", "response", "text"} & set(columns))
         self.assertNotIn(self.request.prompt, serialized)
         self.assertNotIn("A safe reply.", serialized)
+        self.assertFalse({"prompt", "response", "text", "reason"} & set(event_columns))
 
     def test_empty_session_does_not_fall_back_to_all_history(self):
         store = UsageStore(self.database)

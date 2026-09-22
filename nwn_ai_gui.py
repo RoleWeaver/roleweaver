@@ -1113,6 +1113,18 @@ class NWNAIApp:
         ).pack(side="right")
 
     def _build_guardrails_usage_tab(self, frame):
+        pages = ttk.Notebook(frame)
+        pages.pack(fill="both", expand=True)
+        overview = ttk.Frame(pages, padding=7)
+        policy_page = ttk.Frame(pages, padding=7)
+        events_page = ttk.Frame(pages, padding=7)
+        pages.add(overview, text="Overview")
+        pages.add(policy_page, text="Policy")
+        pages.add(events_page, text="Events")
+        self._build_guardrail_policy_page(policy_page)
+        self._build_guardrail_events_page(events_page)
+        frame = overview
+
         toolbar = ttk.Frame(frame)
         toolbar.pack(fill="x")
         self.usage_window_var = tk.StringVar(value="24h")
@@ -1129,7 +1141,7 @@ class NWNAIApp:
         metric_combo = ttk.Combobox(
             toolbar,
             textvariable=self.usage_metric_var,
-            values=["Requests", "Tokens", "Estimated cost"],
+            values=["Requests", "API calls", "Tokens", "Estimated cost"],
             state="readonly",
             width=15,
         )
@@ -1188,6 +1200,207 @@ class NWNAIApp:
         settings.columnconfigure(2, weight=1)
         self.root.after_idle(self._refresh_guardrails_usage)
 
+    def _build_guardrail_policy_page(self, frame):
+        self.guardrail_purpose_labels = {
+            "Default": "",
+            "Replies": "reply",
+            "Candidates": "candidates",
+            "Summaries": "summary",
+            "AFK": "afk",
+            "Translations": "translation",
+            "Connection tests": "connection_test",
+        }
+        selector = ttk.Frame(frame)
+        selector.pack(fill="x", pady=(0, 6))
+        ttk.Label(selector, text="Policy for:").pack(side="left")
+        self.guardrail_policy_purpose_var = tk.StringVar(value="Default")
+        purpose_combo = ttk.Combobox(
+            selector,
+            textvariable=self.guardrail_policy_purpose_var,
+            values=list(self.guardrail_purpose_labels),
+            state="readonly",
+            width=18,
+        )
+        purpose_combo.pack(side="left", padx=6)
+        purpose_combo.bind("<<ComboboxSelected>>", self._load_guardrail_policy)
+        ttk.Label(
+            selector,
+            text="Purpose settings inherit Default until explicitly changed.",
+            foreground="#949ba4",
+        ).pack(side="left", padx=10)
+
+        rules = ttk.LabelFrame(frame, text="Categories and actions", padding=7)
+        rules.pack(fill="x")
+        self.guardrail_policy_vars = {}
+        self.guardrail_policy_combos = {}
+        for index, (category, label) in enumerate(core.CATEGORY_LABELS.items()):
+            column = 0 if index < 5 else 2
+            row = index if index < 5 else index - 5
+            ttk.Label(rules, text=label + ":").grid(
+                row=row, column=column, sticky="w", padx=(0, 8), pady=2
+            )
+            variable = tk.StringVar()
+            self.guardrail_policy_vars[category] = variable
+            combo = ttk.Combobox(
+                rules,
+                textvariable=variable,
+                values=["Off", "Warn", "Block", "Replace"],
+                state="readonly",
+                width=11,
+            )
+            combo.grid(row=row, column=column + 1, sticky="w", padx=(0, 22), pady=2)
+            self.guardrail_policy_combos[category] = combo
+
+        behavior = ttk.LabelFrame(frame, text="Replacement and retry", padding=7)
+        behavior.pack(fill="x", pady=(7, 0))
+        self.guardrail_retry_var = tk.BooleanVar(
+            value=bool(self.settings.get("guardrail_retry_output_once", True))
+        )
+        ttk.Checkbutton(
+            behavior,
+            text="Retry a rejected output once before applying Block or Replace",
+            variable=self.guardrail_retry_var,
+        ).grid(row=0, column=0, columnspan=2, sticky="w")
+        ttk.Label(behavior, text="Replacement reply:").grid(row=1, column=0, sticky="w", pady=3)
+        self.guardrail_replacement_var = tk.StringVar(
+            value=self.settings.get(
+                "guardrail_replacement_text",
+                "Let us keep to matters of this world. What do you need?",
+            )
+        )
+        ttk.Entry(behavior, textvariable=self.guardrail_replacement_var).grid(
+            row=1, column=1, sticky="ew", padx=(8, 0), pady=3
+        )
+        behavior.columnconfigure(1, weight=1)
+
+        custom = ttk.LabelFrame(frame, text="Custom policy", padding=7)
+        custom.pack(fill="both", expand=True, pady=(7, 0))
+        ttk.Label(custom, text="Terms (one per line):").grid(row=0, column=0, sticky="nw")
+        ttk.Label(custom, text="Regular expressions (one per line):").grid(
+            row=0, column=1, sticky="nw", padx=(12, 0)
+        )
+        self.guardrail_terms_text = tk.Text(custom, height=3, wrap="word")
+        self.guardrail_regex_text = tk.Text(custom, height=3, wrap="none")
+        self.guardrail_terms_text.grid(row=1, column=0, sticky="nsew", pady=(3, 0))
+        self.guardrail_regex_text.grid(
+            row=1, column=1, sticky="nsew", padx=(12, 0), pady=(3, 0)
+        )
+        self.guardrail_terms_text.insert("1.0", self.settings.get("guardrail_custom_terms", ""))
+        self.guardrail_regex_text.insert("1.0", self.settings.get("guardrail_custom_regex", ""))
+        custom.columnconfigure(0, weight=1)
+        custom.columnconfigure(1, weight=1)
+        custom.rowconfigure(1, weight=1)
+        ttk.Button(frame, text="Save policy", command=self._save_guardrail_policy).pack(
+            anchor="e", pady=(7, 0)
+        )
+        self._load_guardrail_policy()
+
+    def _load_guardrail_policy(self, _event=None):
+        purpose = self.guardrail_purpose_labels[self.guardrail_policy_purpose_var.get()]
+        defaults = {**core.DEFAULT_ACTIONS, **self.settings.get("guardrail_default_policies", {})}
+        overrides = self.settings.get("guardrail_purpose_policies", {}).get(purpose, {})
+        for category, variable in self.guardrail_policy_vars.items():
+            values = ["Off", "Warn", "Block", "Replace"]
+            if purpose:
+                values.append("Inherit")
+            self.guardrail_policy_combos[category].configure(values=values)
+            action = defaults[category] if not purpose else overrides.get(category, "inherit")
+            variable.set(action.title())
+
+    def _save_guardrail_policy(self):
+        try:
+            expression_text = self.guardrail_regex_text.get("1.0", "end-1c").strip()
+            errors = core.validate_custom_patterns(expression_text)
+            if errors:
+                raise ValueError("\n".join(errors))
+            purpose = self.guardrail_purpose_labels[self.guardrail_policy_purpose_var.get()]
+            if purpose:
+                policies = dict(self.settings.get("guardrail_purpose_policies", {}))
+                overrides = dict(policies.get(purpose, {}))
+                for category, variable in self.guardrail_policy_vars.items():
+                    action = variable.get().lower()
+                    if action == "inherit":
+                        overrides.pop(category, None)
+                    else:
+                        overrides[category] = action
+                if overrides:
+                    policies[purpose] = overrides
+                else:
+                    policies.pop(purpose, None)
+                self.settings["guardrail_purpose_policies"] = policies
+            else:
+                defaults = dict(core.DEFAULT_ACTIONS)
+                for category, variable in self.guardrail_policy_vars.items():
+                    action = variable.get().lower()
+                    defaults[category] = (
+                        action if action in core.ACTION_VALUES else core.DEFAULT_ACTIONS[category]
+                    )
+                self.settings["guardrail_default_policies"] = defaults
+            self.settings.update(
+                guardrail_custom_terms=self.guardrail_terms_text.get("1.0", "end-1c").strip(),
+                guardrail_custom_regex=expression_text,
+                guardrail_replacement_text=self.guardrail_replacement_var.get().strip(),
+                guardrail_retry_output_once=bool(self.guardrail_retry_var.get()),
+            )
+            core.save_settings(self.settings)
+            messagebox.showinfo(
+                "Guardrails",
+                "Policy saved. It applies to new AI requests; size limits apply after Start.",
+            )
+        except Exception as exc:
+            messagebox.showerror("Guardrails", str(exc))
+
+    def _build_guardrail_events_page(self, frame):
+        toolbar = ttk.Frame(frame)
+        toolbar.pack(fill="x", pady=(0, 6))
+        ttk.Label(
+            toolbar,
+            text="Policy events contain metadata only—never prompts or replies.",
+        ).pack(side="left")
+        ttk.Button(toolbar, text="Refresh", command=self._refresh_guardrail_events).pack(
+            side="right"
+        )
+        columns = ("time", "purpose", "direction", "category", "action", "backend")
+        self.guardrail_events_tree = ttk.Treeview(frame, columns=columns, show="headings", height=9)
+        widths = {"time": 135, "purpose": 90, "direction": 75, "category": 190, "action": 75, "backend": 130}
+        for column in columns:
+            self.guardrail_events_tree.heading(column, text=column.title())
+            self.guardrail_events_tree.column(column, width=widths[column], anchor="w")
+        event_scroll = ttk.Scrollbar(
+            frame, orient="vertical", command=self.guardrail_events_tree.yview
+        )
+        self.guardrail_events_tree.configure(yscrollcommand=event_scroll.set)
+        self.guardrail_events_tree.pack(side="left", fill="both", expand=True)
+        event_scroll.pack(side="right", fill="y")
+
+    def _refresh_guardrail_events(self):
+        if not hasattr(self, "guardrail_events_tree"):
+            return
+        tree = self.guardrail_events_tree
+        tree.delete(*tree.get_children())
+        execution = self.bot.ai_execution if self.bot else None
+        store = self.bot.usage_store if self.bot else core.UsageStore(
+            core.APP_DIR / "RoleWeaver_Data" / "usage.sqlite3"
+        )
+        rows = store.guardrail_events(
+            self.usage_window_var.get(),
+            session=execution.session if execution else "",
+        )
+        for row in rows:
+            timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(row["created"]))
+            tree.insert(
+                "",
+                "end",
+                values=(
+                    timestamp,
+                    row["purpose"],
+                    row["direction"],
+                    core.CATEGORY_LABELS.get(row["category"], row["category"]),
+                    row["action"],
+                    row["backend"],
+                ),
+            )
+
     def _save_guardrail_settings(self):
         try:
             input_limit = int(self.guardrail_input_limit_var.get())
@@ -1222,6 +1435,7 @@ class NWNAIApp:
             backend = execution.guardrails if execution else core.GuardrailsAIBackend(
                 self.settings.get("guardrail_input_max_characters", 50000),
                 self.settings.get("guardrail_output_max_characters", 10000),
+                settings=self.settings,
             )
             status = backend.status()
             if status.get("available"):
@@ -1243,10 +1457,12 @@ class NWNAIApp:
                 else "cost unknown"
             )
             self.usage_summary_var.set(
-                f"{report['requests']} requests • {report['total_tokens']:,} reported tokens • "
+                f"{report['requests']} requests • {report['provider_calls']} API calls • "
+                f"{report['total_tokens']:,} reported tokens • "
                 f"{report['unknown_token_requests']} without token data • {report['blocked']} blocked • {cost}"
             )
             self._draw_usage_chart(report["by_purpose"], self.usage_metric_var.get())
+            self._refresh_guardrail_events()
         except Exception as exc:
             self.guardrail_status_var.set(f"Usage display error: {type(exc).__name__}: {exc}")
 
@@ -1260,6 +1476,7 @@ class NWNAIApp:
             return
         keys = {
             "Requests": "requests",
+            "API calls": "provider_calls",
             "Tokens": "tokens",
             "Estimated cost": "estimated_cost",
         }
@@ -2560,7 +2777,19 @@ class NWNAIApp:
             if core.AI_PROVIDERS[provider]["requires_key"] and not api_key:
                 raise RuntimeError(f"{provider} requires an API key.")
             client = core.create_ai_provider(self.settings, api_key=api_key)
-            message = client.test()
+            test_service = core.AIExecutionService(
+                client,
+                self.settings,
+                core.UsageStore(core.APP_DIR / "RoleWeaver_Data" / "usage.sqlite3"),
+            )
+            test_service.generate(
+                core.AIRequest(
+                    instructions="Return only the requested connection-test response.",
+                    prompt="Reply with exactly: OK",
+                    purpose=core.AIRequestPurpose.CONNECTION_TEST,
+                )
+            )
+            message = f"Connected. Model responding: {client.model}."
             if provider == "LM Studio" and self.model_var.get().strip().casefold() == "auto":
                 self.model_var.set(client.model)
                 self.settings["model"] = client.model
@@ -2570,6 +2799,7 @@ class NWNAIApp:
                 self.settings["model"] = client.model
                 core.save_settings(self.settings)
             self._append_log(f"[AI TEST] {provider}: {message}")
+            self._refresh_guardrails_usage()
             messagebox.showinfo("AI connection", message)
         except Exception as exc:
             self._append_log(f"[AI TEST ERROR] {type(exc).__name__}: {exc}")
