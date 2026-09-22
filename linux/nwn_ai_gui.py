@@ -665,6 +665,7 @@ class NWNAIApp:
         self._build_language_settings_tab(language_frame)
         self.update_panel = UpdatePanel(
             update_frame, self.root, platform="linux", prepare_install=lambda: False,
+            data_root=core.APP_DIR, prepare_data=self._prepare_update_data,
             on_available=lambda version: self._append_log(
                 f"[UPDATE] Role Weaver {version} is available. Open the Updates tab to review it."
             ),
@@ -3801,6 +3802,21 @@ class NWNAIApp:
 
     def recover_edits(self):
         self.edit_recovery.show()
+
+    def _prepare_update_data(self):
+        if self.running or self.bot is not None:
+            messagebox.showinfo(
+                "Stop Role Weaver first",
+                "Stop the current session and restart Role Weaver before preparing an update.",
+                parent=self.root,
+            )
+            return False
+        if not self.edit_recovery.flush():
+            messagebox.showerror(
+                "Update postponed", "Unsaved edits could not be recovered.", parent=self.root
+            )
+            return False
+        return True
 
     def on_close(self):
         if not self.edit_recovery.flush() and not messagebox.askyesno("Unsaved recovery edits", "Some recovered edits could not be saved. Close anyway and lose those changes?", parent=self.root):

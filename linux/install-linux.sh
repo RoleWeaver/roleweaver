@@ -21,7 +21,7 @@ for tool in "${tools[@]}"; do
 done
 python3 -m venv .venv
 package_root='.'
-if [[ -f ../pyproject.toml ]]; then
+if [[ ! -f pyproject.toml && -f ../pyproject.toml ]]; then
     package_root='..'
 fi
 .venv/bin/python -m pip install -r requirements.txt

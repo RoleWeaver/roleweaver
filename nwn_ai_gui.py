@@ -690,6 +690,7 @@ class NWNAIApp:
         self.update_panel = UpdatePanel(
             update_frame, self.root, platform="win32", prepare_install=self._prepare_update_install,
             installed=(core.APP_DIR / "unins000.exe").exists(),
+            data_root=core.APP_DIR, prepare_data=self._prepare_update_data,
             on_available=lambda version: self._append_log(
                 f"[UPDATE] Role Weaver {version} is available. Open the Updates tab to review it."
             ),
@@ -4104,10 +4105,16 @@ class NWNAIApp:
             self.root.destroy()
 
     def _prepare_update_install(self):
+        if not self._prepare_update_data():
+            return False
+        self.on_close()
+        return not self.root.winfo_exists()
+
+    def _prepare_update_data(self):
         if self.running or self.bot is not None:
             messagebox.showinfo(
                 "Stop Role Weaver first",
-                "Stop the current session and restart Role Weaver before installing an update.",
+                "Stop the current session and restart Role Weaver before preparing an update.",
                 parent=self.root,
             )
             return False
@@ -4116,8 +4123,7 @@ class NWNAIApp:
                 "Update postponed", "Unsaved edits could not be recovered.", parent=self.root
             )
             return False
-        self.on_close()
-        return not self.root.winfo_exists()
+        return True
 
 
 def main():

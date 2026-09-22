@@ -24,6 +24,10 @@ class UpdateTests(unittest.TestCase):
         self.assertTrue(updates.is_newer("1.2.4", "1.2.3"))
         self.assertFalse(updates.is_newer("1.2.3", "1.2.3"))
         self.assertEqual(updates.asset_name("1.2.4", "win32"), "RoleWeaver-Setup-v1.2.4.exe")
+        self.assertEqual(
+            updates.asset_name("1.2.4", "win32", portable=True),
+            "RoleWeaver-Portable-v1.2.4.zip",
+        )
         self.assertEqual(updates.asset_name("1.2.4", "linux"), "RoleWeaver-v1.2.4-Linux.tar.gz")
         with self.assertRaises(updates.UpdateError):
             updates.is_newer("1.2.4-alpha", "1.2.3")

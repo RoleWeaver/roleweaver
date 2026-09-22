@@ -42,17 +42,22 @@ def is_newer(version: str, current: str = __version__) -> bool:
     return _version_tuple(version) > _version_tuple(current)
 
 
-def asset_name(version: str, platform: str) -> str:
+def asset_name(version: str, platform: str, *, portable: bool = False) -> str:
     if platform == "win32":
+        if portable:
+            return f"RoleWeaver-Portable-v{version}.zip"
         return f"RoleWeaver-Setup-v{version}.exe"
     if platform == "linux":
         return f"RoleWeaver-v{version}-Linux.tar.gz"
     raise UpdateError(f"Updates are unavailable for platform {platform!r}.")
 
 
-def can_download(release: Release, platform: str) -> bool:
+def can_download(release: Release, platform: str, *, portable: bool = False) -> bool:
     checksum = "SHA256SUMS-Linux.txt" if platform == "linux" else "SHA256SUMS.txt"
-    return asset_name(release.version, platform) in release.assets and checksum in release.assets
+    return (
+        asset_name(release.version, platform, portable=portable) in release.assets
+        and checksum in release.assets
+    )
 
 
 def _github_url(url: str) -> bool:
@@ -104,9 +109,11 @@ def _expected_hash(checksums: bytes, filename: str) -> str:
     raise UpdateError(f"No SHA-256 checksum was published for {filename}.")
 
 
-def stage_release(release: Release, platform: str, destination: Path) -> Path:
+def stage_release(
+    release: Release, platform: str, destination: Path, *, portable: bool = False
+) -> Path:
     """Download an exact release asset, verify SHA-256, then atomically publish it."""
-    filename = asset_name(release.version, platform)
+    filename = asset_name(release.version, platform, portable=portable)
     asset_url = release.assets.get(filename)
     checksum_url = release.assets.get("SHA256SUMS.txt")
     if platform == "linux":

@@ -38,6 +38,12 @@ for native, Wine/Proton and NWN2 EE 64-bit paths.
 
 ## Updating and recovery
 
+From a version with an **Updates** tab, use **Check for Updates**, then
+**Download Update** and **Prepare New Folder**. The new folder receives a copy
+of your saved data while the old installation remains intact. Close the old
+client before running `bash install-linux.sh` and `bash start-role-weaver.sh`
+from the new folder. See the repository's `UPDATES.md` for the complete workflow.
+
 Back up with the existing client's Backup control, then close it. Extract the
 new archive into a fresh folder and restore your backup if moving installations.
 Do not overwrite personal profiles with generic examples. Rerun install-linux.sh
