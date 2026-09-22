@@ -29,7 +29,11 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 
 [Files]
-Source: "..\dist\RoleWeaver\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\RoleWeaver\*"; DestDir: "{app}"; Excludes: "Characters\*,Campaigns\*,Lore\*,RoleplayRules\*"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\RoleWeaver\Characters\*"; DestDir: "{app}\Characters"; Flags: onlyifdoesntexist uninsneveruninstall recursesubdirs createallsubdirs
+Source: "..\dist\RoleWeaver\Campaigns\*"; DestDir: "{app}\Campaigns"; Flags: onlyifdoesntexist uninsneveruninstall recursesubdirs createallsubdirs
+Source: "..\dist\RoleWeaver\Lore\*"; DestDir: "{app}\Lore"; Flags: onlyifdoesntexist uninsneveruninstall recursesubdirs createallsubdirs
+Source: "..\dist\RoleWeaver\RoleplayRules\*"; DestDir: "{app}\RoleplayRules"; Flags: onlyifdoesntexist uninsneveruninstall recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\Role Weaver"; Filename: "{app}\{#MyAppExeName}"

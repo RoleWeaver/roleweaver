@@ -17,6 +17,7 @@ from pathlib import Path
 
 import nwn_ai_bot as core
 import roleweaver_backup as backups
+from roleweaver.update_ui import UpdatePanel
 
 
 RESOURCE_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
@@ -672,6 +673,7 @@ class NWNAIApp:
         history_frame = ttk.Frame(lower_tabs, padding=7)
         guardrail_frame = ttk.Frame(lower_tabs, padding=7)
         language_frame = ttk.Frame(lower_tabs, padding=7)
+        update_frame = ttk.Frame(lower_tabs, padding=7)
         lower_tabs.add(draft_frame, text="AI Draft")
         lower_tabs.add(context_frame, text="AI Context")
         lower_tabs.add(relationship_frame, text="Relationships")
@@ -682,8 +684,16 @@ class NWNAIApp:
         lower_tabs.add(history_frame, text="History")
         lower_tabs.add(guardrail_frame, text="Guardrails & Usage")
         lower_tabs.add(language_frame, text="Language Settings")
+        lower_tabs.add(update_frame, text="Updates")
         self._build_guardrails_usage_tab(guardrail_frame)
         self._build_language_settings_tab(language_frame)
+        self.update_panel = UpdatePanel(
+            update_frame, self.root, platform="win32", prepare_install=self._prepare_update_install,
+            installed=(core.APP_DIR / "unins000.exe").exists(),
+            on_available=lambda version: self._append_log(
+                f"[UPDATE] Role Weaver {version} is available. Open the Updates tab to review it."
+            ),
+        )
 
         candidate_bar = ttk.Frame(draft_frame)
         candidate_bar.pack(fill="x", pady=(0, 6))
@@ -4092,6 +4102,22 @@ class NWNAIApp:
             self.stop_bot()
         finally:
             self.root.destroy()
+
+    def _prepare_update_install(self):
+        if self.running or self.bot is not None:
+            messagebox.showinfo(
+                "Stop Role Weaver first",
+                "Stop the current session and restart Role Weaver before installing an update.",
+                parent=self.root,
+            )
+            return False
+        if not self.edit_recovery.flush():
+            messagebox.showerror(
+                "Update postponed", "Unsaved edits could not be recovered.", parent=self.root
+            )
+            return False
+        self.on_close()
+        return not self.root.winfo_exists()
 
 
 def main():

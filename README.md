@@ -26,6 +26,7 @@ Read [release notes](RELEASE_NOTES_v1.2.3.md) and [NWN2 logging](NWN2_LOGGING.md
 - [Edit and summary recovery](EDIT_SUMMARY_RECOVERY.md): autosaving Guidance, Character, Lore and AI Draft text; resuming pending summary batches without applying them twice.
 - [Guardrails and AI usage](GUARDRAILS_AND_USAGE.md): local input/output checks plus request, token and estimated-cost monitoring.
 - [Translation service](TRANSLATION.md): shared language contracts, protected terms and batch guarantees.
+- [Updates](UPDATES.md): in-app stable-release checks, verified downloads, and platform-specific install steps.
 - [Client fixes and acceptance checks](FEEDBACK_FIXES.md): quieter backups, Auto log selection, copy/clear recovery controls and Exit Program.
 
 ## Download for Windows

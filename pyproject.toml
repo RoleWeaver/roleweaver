@@ -57,6 +57,7 @@ include = [
     "tests/test_guardrails_usage.py",
     "tests/test_translation.py",
     "tests/test_source_integrity.py",
+    "tests/test_updates.py",
     "scripts/check_source_integrity.py",
 ]
 
