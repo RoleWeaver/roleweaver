@@ -11,6 +11,7 @@ remain usable and existing character, campaign and memory data stay compatible.
 | `src/roleweaver/` | Shared, platform-neutral application code |
 | `src/roleweaver/ai/` | Provider-independent AI contracts and built-in providers |
 | `src/roleweaver/guardrails/` | Replaceable dialogue-safety boundary and Guardrails AI adapter |
+| `src/roleweaver/translation/` | Language contracts, protected terminology and guarded batch translation |
 | `src/roleweaver/config/` | Typed defaults, migration-aware settings loading and persistence |
 | `src/roleweaver/conversation/` | Chat event contract, NWN log parsing and resilient log following |
 | `src/roleweaver/games.py` | Game editions, log discovery and NWN2 normalization |
@@ -55,8 +56,10 @@ and token counts when the provider reports them. A count with
 remain `None`; callers must not present them as zero.
 
 The supported purposes are reply, candidate generation, memory summary, AFK,
-translation and connection test. Translation is included in the contract now so
-it can use the same monitoring and guardrail path later.
+translation and connection test. `roleweaver.translation.TranslationService`
+builds structured translation requests on this boundary, verifies stable message
+IDs and protected terms, and returns provider metadata without coupling callers
+to an SDK.
 
 `AIExecutionService` is the common runtime boundary around providers. It checks
 input through a `GuardrailBackend`, invokes the provider, normalizes the result,

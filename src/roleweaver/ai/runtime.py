@@ -45,7 +45,12 @@ class AIExecutionService:
             self.settings.get("ai_provider", ""),
         )
         model = _label(getattr(self.provider, "model", None), self.settings.get("model", ""))
-        context = {"purpose": request.purpose.value, "instructions": request.instructions}
+        policy_purpose = request.purpose.value
+        if request.purpose.value == "translation":
+            direction = request.metadata.get("translation_direction")
+            if direction in {"incoming", "outgoing"}:
+                policy_purpose = f"translation_{direction}"
+        context = {"purpose": policy_purpose, "instructions": request.instructions}
         result = None
         strongest_action = "pass"
         provider_calls = 0
