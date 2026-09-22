@@ -9,15 +9,17 @@
 
 ## Editable development environment
 
-Clone the repository and work from its root.
+Clone the repository or extract the developer-source ZIP and work from its root.
+The wheel/sdist contain only the shared Python package, not the desktop client;
+see [DEVELOPER_PACKAGE.md](DEVELOPER_PACKAGE.md) for the download choices.
 
 ### Windows PowerShell
 
 ```powershell
 py -3 -m venv .venv
-.venv\Scripts\python.exe -m pip install --upgrade pip
-.venv\Scripts\python.exe -m pip install -e ".[dev]"
-.venv\Scripts\python.exe nwn_ai_gui.py
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe nwn_ai_gui.py
 ```
 
 ### Linux
@@ -39,16 +41,18 @@ or production API key in automated tests.
 Run all checks before opening a pull request:
 
 ```powershell
-py -3 -m compileall -q src
-py -3 -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe -m compileall -q src
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 Push-Location linux
-py -3 -m unittest discover -s tests -v
+..\.venv\Scripts\python.exe -m unittest discover -s tests -v
 Pop-Location
-py -3 -m ruff check
-py -3 scripts/check_source_integrity.py
+.\.venv\Scripts\python.exe -m ruff check
+.\.venv\Scripts\python.exe scripts/check_source_integrity.py
 ```
 
-On Linux, use `.venv/bin/python` in place of `py -3`.
+On Linux, run the root suite with `.venv/bin/python`, then run
+`../.venv/bin/python -m unittest discover -s tests -v` from `linux/`.
+Run Ruff and the source-integrity check with the root `.venv/bin/python`.
 
 `check_source_integrity.py` validates UTF-8 source, catches common mojibake,
 and compares shared Windows/Linux bot functions as Python syntax trees. Its
@@ -61,13 +65,29 @@ current `TESTING_*.md` and `PUBLIC_RELEASE_CHECKLIST.md` documents.
 ## Build the development package
 
 ```powershell
-py -3 -m build
+.\.venv\Scripts\python.exe -m build
 ```
 
 This creates a wheel and Python source distribution under `dist/`. They contain
 the reusable `roleweaver` package, not private runtime data. The complete
 developer-source ZIP produced by the release workflow contains the application
-entry points, tests, documentation and build scripts as well.
+entry points, tests, documentation and build scripts as well. The release
+workflow validates that ZIP with `scripts/check_developer_package.py`; it uses
+tracked files only. Neither archive type is a substitute for the packaged
+Windows executable or Linux desktop installation.
+
+## Module boundaries and next extractions
+
+`src/roleweaver/` owns contracts, parsing, settings, storage, translation,
+guardrails and update preparation shared by both clients. `update_ui.py` is a
+shared Tk widget, not platform-neutral business logic. The large root and
+`linux/` bot and GUI files still own session orchestration and OS input;
+`ARCHITECTURE.md` maps the current boundaries and proposed small extractions.
+
+For a new feature, prefer a focused shared module with a typed input/output
+contract and synthetic tests. Keep game input and Tk callbacks thin. Migrate
+one behavior at a time so existing profiles, recovery files and keyboard
+workflows remain compatible.
 
 ## Adding a provider
 

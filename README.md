@@ -127,16 +127,23 @@ See **AUTOMATIC_LOG_DETECTION.md** for the automatic detection and adaptive-pars
 - **INSTALLATION.md** — source installation
 - **BUILDING_WINDOWS.md** — Windows builds and releases
 - **DEVELOPMENT.md** — editable setup, tests and development packages
+- **DEVELOPER_PACKAGE.md** — which download to use and where to change code
+- **CONTRIBUTING.md** — pull-request and privacy expectations
 - **ARCHITECTURE.md** — package boundaries and contributor-oriented design
 - **GUARDRAILS_AND_USAGE.md** — guardrail settings, usage charts and local telemetry
+- **TRANSLATION.md** — translation contracts and desktop workflow
+- **UPDATES.md** — update checks, verified downloads and fresh-folder upgrades
 
 ## Development package
 
-Shared platform-neutral code lives in the installable `src/roleweaver` package.
+Shared services and a desktop update widget live in the installable
+`src/roleweaver` package.
 Every release workflow builds a Python wheel, source distribution and complete
 developer-source ZIP in addition to end-user packages. Start with
-`DEVELOPMENT.md`; contributions should put new shared behavior in the package
-instead of duplicating it between the Windows and Linux entry points.
+`DEVELOPER_PACKAGE.md`, then `DEVELOPMENT.md`. The wheel does not contain the
+desktop launchers; use a Git clone or developer ZIP to work on the full client.
+Contributions should put shared behavior in the package instead of duplicating
+it between the Windows and Linux entry points.
 
 ## Privacy and API keys
 

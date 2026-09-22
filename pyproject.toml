@@ -59,7 +59,9 @@ include = [
     "tests/test_source_integrity.py",
     "tests/test_updates.py",
     "tests/test_update_install.py",
+    "tests/test_developer_package.py",
     "scripts/check_source_integrity.py",
+    "scripts/check_developer_package.py",
 ]
 
 [tool.ruff.lint]

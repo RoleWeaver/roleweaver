@@ -8,7 +8,7 @@ remain usable and existing character, campaign and memory data stay compatible.
 
 | Path | Responsibility |
 | --- | --- |
-| `src/roleweaver/` | Shared, platform-neutral application code |
+| `src/roleweaver/` | Shared application package; core services are platform-neutral, with one shared Tk update widget |
 | `src/roleweaver/ai/` | Provider-independent AI contracts and built-in providers |
 | `src/roleweaver/guardrails/` | Replaceable dialogue-safety boundary and Guardrails AI adapter |
 | `src/roleweaver/translation/` | Language contracts, protected terminology and guarded batch translation |
@@ -17,6 +17,9 @@ remain usable and existing character, campaign and memory data stay compatible.
 | `src/roleweaver/games.py` | Game editions, log discovery and NWN2 normalization |
 | `src/roleweaver/paths.py` | Explicit runtime locations for source and packaged applications |
 | `src/roleweaver/storage/` | Atomic writes, validated backups and crash recovery |
+| `src/roleweaver/updates.py` | Stable-release discovery and checksum-verified downloads |
+| `src/roleweaver/update_install.py` | Validated fresh-folder extraction and saved-data migration |
+| `src/roleweaver/update_ui.py` | Shared Tk Updates tab; desktop adapter, not a core service |
 | `nwn_ai_gui.py` | Windows Tkinter entry point and compatibility application shell |
 | `nwn_ai_bot.py` | Windows conversation engine and compatibility exports |
 | `linux/` | Linux entry points and platform input adapter |
@@ -148,5 +151,29 @@ shared package contracts and services
 provider SDKs / platform adapters / filesystem
 ```
 
-Shared modules must not import either GUI. Provider modules must not know about
-Tkinter, NWN input injection, character storage or campaign storage.
+Core service modules must not import either GUI or the shared Tk update widget.
+Provider modules must not know about Tkinter, NWN input injection, character
+storage or campaign storage. `update_ui.py` is intentionally a desktop adapter;
+it calls the platform-neutral update services but they never import it.
+
+## Modularity work after the documentation pass
+
+The two bot files and two GUI files are still several thousand lines each. A
+single large rewrite would be difficult to review and could break input,
+recovery or saved-data compatibility. Prefer these independently testable
+extractions, in order:
+
+1. Move shared session orchestration (chat events, generation requests, draft
+   state and translation sequencing) from mirrored bot methods into a core
+   service. Pass log, clipboard and game-input operations in as narrow ports.
+2. Move repeated Tk panels and presentation state into a `roleweaver.desktop`
+   package. Keep root and Linux entry points responsible for platform identity,
+   keyboard bindings and launch lifecycle only.
+3. Give character, campaign and lore persistence small repositories built on
+   `RuntimePaths` and atomic storage. Do not change on-disk formats as part of
+   the extraction.
+4. Delete each obsolete mirrored implementation only after both clients call
+   the shared service and contract, Windows and native Linux tests pass.
+
+The first extraction should be one bounded workflow, not the entire bot. Keep
+the existing public names as compatibility wrappers while extensions migrate.

@@ -26,9 +26,12 @@ Features should preserve player/DM control rather than silently taking ownership
 
 - Keep changes focused.
 - Do not commit `settings.json`, `RoleWeaver_Data`, API keys, logs, or personal character profiles.
-- Run a Python syntax check before submitting.
+- Run the root and Linux-layout test suites, Ruff and the source-integrity guard
+  using the commands in `DEVELOPMENT.md`.
 - If changing the GUI, verify all Tkinter button callbacks still resolve.
 - If changing NWN input behavior, test manual F9 paste as well as automatic sending.
+- Describe which behavior was tested on Windows and native Linux, and identify
+  any platform you could not test.
 
 ## Development setup
 
@@ -36,10 +39,12 @@ Use an editable package installation so changes under `src/roleweaver` are
 available to both platform clients immediately:
 
     py -3 -m venv .venv
-    .venv\Scripts\python.exe -m pip install -e ".[dev]"
+    .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 
-See `DEVELOPMENT.md` for Linux commands, validation, package builds and provider
-development. `ARCHITECTURE.md` describes module boundaries and migration state.
+See `DEVELOPER_PACKAGE.md` if choosing between the complete developer ZIP and
+the installable Python wheel. `DEVELOPMENT.md` covers Linux commands,
+validation, package builds and extension points. `ARCHITECTURE.md` describes
+module boundaries and migration state.
 
 Windows packaging instructions are in `BUILDING_WINDOWS.md`.
 
@@ -52,5 +57,6 @@ modules still have mirrored platform copies during the staged migration, so
 changes to those files must remain synchronized for now.
 
 Run the root tests from the root and the Linux tests from `linux/`; tests use
-isolated temporary data. Run both platform suites before tagging a release.
-Never commit personal data, API keys, recovery journals or build output.
+isolated temporary data. A Windows run of the Linux-layout suite does not
+replace an Ubuntu/X11 or Wayland smoke test before a release. Never commit
+personal data, API keys, recovery journals or build output.

@@ -10,7 +10,7 @@ The repository contains `.github/workflows/windows-release.yml`.
 
 1. Open the repository on GitHub.
 2. Select **Actions**.
-3. Select **Build Windows Release**.
+3. Select **Build Role Weaver Release**.
 4. Choose **Run workflow**.
 5. When the job completes, download the versioned `RoleWeaver-Windows` artifact.
 
@@ -40,12 +40,15 @@ packages and checksums, then attaches the downloads to a GitHub Release.
 Install the development dependencies and build from the repository root:
 
 ```powershell
-py -3 -m pip install -e ".[dev]"
-py -3 -m build
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m build
 ```
 
 The wheel and source distribution are written to `dist\`. See `DEVELOPMENT.md`
-for their scope and the complete validation commands.
+for their scope and the complete validation commands. `DEVELOPER_PACKAGE.md`
+explains why desktop contributors need the full source ZIP or a Git clone. The
+release workflow checks that ZIP with `scripts/check_developer_package.py`.
 
 ## Local Windows build
 

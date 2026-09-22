@@ -76,6 +76,7 @@ jobs:
         run: |
           python -m build --outdir release
           git archive --format=zip --prefix="RoleWeaver-Developer-v$env:ROLEWEAVER_VERSION/" --output="release/RoleWeaver-Developer-v$env:ROLEWEAVER_VERSION.zip" HEAD
+          python scripts/check_developer_package.py "release/RoleWeaver-Developer-v$env:ROLEWEAVER_VERSION.zip"
 
       - name: Generate SHA256 checksums
         shell: pwsh

@@ -1,23 +1,49 @@
-# Public Release Checklist
+# Public release checklist
 
-Before publishing Role Weaver on GitHub:
+Before tagging the next Role Weaver client release:
 
-- [ ] Choose and add a software license.
-- [ ] Replace any placeholder repository links in documentation.
-- [ ] Confirm no API keys, personal log paths, private character profiles, or conversation histories are committed.
-- [ ] Test a clean install on a Windows machine or VM.
-- [ ] Test F8/F9/F10 with the selected NWN or NWN2 edition (F10 is AFK).
-- [ ] Test OpenAI, Gemini, and LM Studio with currently supported models.
-- [ ] Confirm the splash image and taskbar icon display correctly.
-- [ ] Verify `requirements.txt` installs in a fresh virtual environment.
-- [ ] Build and inspect the wheel and Python source distribution with `python -m build`.
-- [ ] Confirm the developer-source ZIP contains `src/`, tests and contributor documentation.
-- [ ] Confirm `SHA256SUMS.txt` covers every published release asset.
-- [ ] Tag a version such as `v0.9.0`.
-- [ ] Create a GitHub Release ZIP.
-- [ ] Add screenshots and a short GIF/video showing the F8/F9 workflow.
-- [ ] Document known limitations, especially local-only memory synchronization.
-- [ ] Consider adding a signed standalone Windows build in a later release.
+## Source and metadata
+
+- [ ] Choose the exact release commit (merge to `main` or tag the intended
+  branch commit); do not tag an older checkout accidentally.
+- [ ] Set matching versions in root `VERSION`, `linux/VERSION`, and
+  `src/roleweaver/__init__.py`.
+- [ ] Write new release notes and acceptance checks. Point the release workflow
+  `body_path`, README, Linux guides and packaged documentation at the new files.
+- [ ] Confirm the MIT license and repository links are present and current.
+- [ ] Review tracked files for API keys, private logs, personal character
+  profiles, conversation histories and machine-specific paths.
+
+## Automated builds and manual acceptance
+
+- [ ] Run the root and Linux-layout suites, Ruff, source-integrity check and
+  `python -m build` in an editable development environment.
+- [ ] Run Linux CI on Ubuntu, including the native GUI smoke test. Install from
+  the **extracted Linux release archive**, not only the source checkout.
+- [ ] Build Windows Setup, portable ZIP, developer ZIP, wheel and sdist. Run
+  `scripts/check_developer_package.py` on the developer ZIP.
+- [ ] Test clean Windows Setup and portable launches, plus an upgrade from the
+  previous Setup release that preserves settings, character/campaign files and
+  memory. Confirm splash image and taskbar icon.
+- [ ] Test Ubuntu X11 and, if supported, Wayland startup and game-input limits.
+  Test F8/F9/F10 and manual paste with the selected NWN or NWN2 edition.
+- [ ] Exercise update download, checksum-failure rejection and fresh-folder
+  data migration with a simulated newer release. The ordinary Updates tab will
+  show “up to date” until a newer stable release exists.
+- [ ] Test OpenAI, Gemini and LM Studio with currently supported models;
+  confirm translation and guardrail/usage UI against real provider responses.
+- [ ] Check that Windows and Linux checksum manifests cover their respective
+  published assets; inspect the final archives before publishing.
+
+## Publication
+
+- [ ] Tag the checked release commit as `vX.Y.Z`; the release workflow publishes
+  the downloads and notes. Verify the public asset names and checksums.
+- [ ] Keep known limitations visible, especially local-only memory, Linux
+  Wayland input limits and the fact that portable/Linux updates prepare a fresh
+  folder rather than overwrite the old installation.
+- [ ] Consider signed Windows builds and new screenshots/video as follow-up
+  improvements, not substitutes for acceptance testing.
 
 ## Player + DM messaging
 

@@ -26,12 +26,22 @@ Features should preserve player/DM control rather than silently taking ownership
 
 - Keep changes focused.
 - Do not commit `settings.json`, `RoleWeaver_Data`, API keys, logs, or personal character profiles.
-- Run a Python syntax check before submitting.
+- Run the Linux tests and the root shared/update tests before submitting.
 - If changing the GUI, verify all Tkinter button callbacks still resolve.
 - If changing NWN input behavior, test manual F9 paste as well as automatic sending.
 
 ## Development setup
 
-Install Python and dependencies using the instructions in `INSTALLATION.md`.
+In a repository checkout, use the root `DEVELOPMENT.md` and
+`DEVELOPER_PACKAGE.md` for editable setup and module ownership. From the Linux
+client folder, run `../.venv/bin/python -m unittest discover -s tests -v` when
+using the root development environment. Run the same tests with
+`.venv/bin/python` in an extracted Linux release archive.
 
-Windows packaging instructions are in `BUILDING_WINDOWS.md`.
+Shared contracts and services live under `src/roleweaver/`; Linux keyboard,
+clipboard and desktop integration remain in `linux/`. Do not duplicate shared
+AI, translation, guardrail, update or log-parsing logic in the Linux bot file.
+Native Ubuntu desktop validation is still needed for GUI and game input work.
+
+For Windows packaging, consult `BUILDING_WINDOWS.md` in the full repository or
+developer-source ZIP.
