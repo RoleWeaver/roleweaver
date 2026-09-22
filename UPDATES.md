@@ -37,3 +37,27 @@ portable updates are not part of this stage.
 The update check contacts GitHub over HTTPS. It does not send profiles, chat,
 settings, or API keys. SHA-256 detects corrupted or mismatched downloads, but is
 not a separate signature from GitHub's release publishing account.
+
+## Development rehearsal
+
+The automated rehearsal uses a simulated future release and disposable
+settings/character files; it does not contact GitHub or install a real update.
+It exercises the Updates tab through check, checksum-verified download and
+fresh-folder preparation for Linux and portable Windows. It also checks
+checksum rejection and the installed-Windows installer handoff with process
+launch mocked out.
+
+From the repository root on Windows:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest tests.test_update_rehearsal -v
+```
+
+On Ubuntu after setting up the root development virtual environment:
+
+```bash
+xvfb-run -a .venv/bin/python -m unittest tests.test_update_rehearsal -v
+```
+
+The release workflow runs the Linux rehearsal under Xvfb. A real upgrade from
+the previous release is still required for final acceptance.

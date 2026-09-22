@@ -1,10 +1,10 @@
-# Role Weaver 1.2.3 — Linux installation
+# Role Weaver 1.3.0 — Linux installation
 
 Supports NWN and NWN2 editions. Native NWN:EE uses its user-data logs; classic
 installations and NWN2 through Wine/Proton may require custom log selection.
 
-Download **RoleWeaver-v1.2.3-Linux.tar.gz** from the
-[v1.2.3 release](https://github.com/RoleWeaver/roleweaver/releases/tag/v1.2.3).
+Download **RoleWeaver-v1.3.0-Linux.tar.gz** from the
+[v1.3.0 release](https://github.com/RoleWeaver/roleweaver/releases/tag/v1.3.0).
 Extract into a writable folder. In a full repository checkout, use linux/;
 the Linux release archive already contains the client root.
 
@@ -20,7 +20,7 @@ Open a terminal in the client folder and run as your normal desktop user:
     bash install-linux.sh
     bash start-role-weaver.sh
 
-Python 3.10+ is required. The installer creates .venv and downloads dependencies.
+Python 3.10 through 3.13 is required. The installer creates .venv and downloads dependencies.
 Do not run these two scripts as root.
 
 ## X11 and Wayland
@@ -38,6 +38,11 @@ for native, Wine/Proton and NWN2 EE 64-bit paths.
 
 ## Updating and recovery
 
+Version 1.2.3 has no Updates tab, so its upgrade to 1.3.0 requires a manual
+download. In versions with an Updates tab, use **Download Update** and
+**Prepare New Folder** to verify the archive and copy saved data to a new
+installation. Run `bash install-linux.sh` in that folder before launching.
+
 Back up with the existing client's Backup control, then close it. Extract the
 new archive into a fresh folder and restore your backup if moving installations.
 Do not overwrite personal profiles with generic examples. Rerun install-linux.sh
@@ -49,4 +54,4 @@ See [BACKUP_RECOVERY.md](BACKUP_RECOVERY.md) and
 
     .venv/bin/python -m unittest discover -s tests
 
-Follow [TESTING_v1.2.3.md](TESTING_v1.2.3.md) for live-game and AFK checks.
+Follow [TESTING_v1.3.0.md](TESTING_v1.3.0.md) for live-game, translation and update checks.

@@ -14,11 +14,12 @@ Multiplayer servers have different policies on AI-assisted tools and generated c
 
 Role Weaver also provides character memory, relationship tracking, profiles, and other features that remain useful without generated dialogue, but still ensure to follow server policies.
 
-## Version 1.2.3
+## Version 1.3.0
 
-Includes recovery protection, AFK and game-version selection.
-[Download v1.2.3](https://github.com/RoleWeaver/roleweaver/releases/tag/v1.2.3).
-Read [release notes](RELEASE_NOTES_v1.2.3.md) and [NWN2 logging](NWN2_LOGGING.md).
+Adds editable language translation, client guardrail policies and usage charts,
+and in-app update checks with verified downloads.
+[Download v1.3.0](https://github.com/RoleWeaver/roleweaver/releases/tag/v1.3.0).
+Read [release notes](RELEASE_NOTES_v1.3.0.md) and [NWN2 logging](NWN2_LOGGING.md).
 
 - Windows source and launchers are at the repository root.
 - Linux source and launchers are in [linux/](linux/README.md), preserving X11 and Ubuntu Wayland support.
@@ -31,7 +32,9 @@ Read [release notes](RELEASE_NOTES_v1.2.3.md) and [NWN2 logging](NWN2_LOGGING.md
 
 ## Download for Windows
 
-Use the latest release on the Role Weaver GitHub Releases page. For most users, download **`RoleWeaver-Setup-v1.2.3.exe`**. A portable build, **`RoleWeaver-Portable-v1.2.3.zip`**, is also provided.
+Use the latest release on the Role Weaver GitHub Releases page. For most users,
+download **`RoleWeaver-Setup-v1.3.0.exe`**. A portable build,
+**`RoleWeaver-Portable-v1.3.0.zip`**, is also provided.
 
 Python is not required for either packaged Windows build. Early unsigned releases may trigger Microsoft SmartScreen.
 
@@ -111,7 +114,9 @@ user-language version, review the game-language result, then paste it into NWN.
 
 ## Automatic world and log detection
 
-Role Weaver v1.2.3 does not ship with a named persistent-world compatibility list. It discovers worlds from the NWN client logs already present on the user's computer and stores those profiles locally.
+Role Weaver does not ship with a named persistent-world compatibility list. It
+discovers worlds from the NWN client logs already present on the user's computer
+and stores those profiles locally.
 
 The parser also adapts to several NWN chat-log layouts. When both `[CHAT WINDOW TEXT]` and a structured copy of the same message are present, Role Weaver prefers the structured record to avoid duplicate conversation context. Use **Rescan Logs** to refresh locally discovered worlds. **Browse...** can point Role Weaver at a different NWN client log; if the log identifies a world, that world is then added to the list.
 

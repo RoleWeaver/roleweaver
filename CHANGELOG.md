@@ -1,3 +1,15 @@
+## 1.3.0 — Translation, guardrails and updates
+
+- Add editable incoming/outgoing translation with Language Settings and
+  protected terminology.
+- Add Guardrails AI policy controls, PG defaults, policy events, request/token
+  charts and optional cost estimates.
+- Add stable-release checks, checksum-verified downloads and fresh-folder
+  updates for portable Windows and Linux clients.
+- Improve rapid chat capture and multilingual legacy-log decoding.
+- Move shared providers, configuration, storage, conversation and translation
+  behavior into an installable Python package with contributor documentation.
+
 ## 1.2.3
 
 - Add automatic backup/crash recovery, atomic saves, recovered edits and durable pending AI summaries.

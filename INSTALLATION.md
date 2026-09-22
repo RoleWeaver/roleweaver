@@ -1,18 +1,18 @@
-# Role Weaver 1.2.3 — Installation
+# Role Weaver 1.3.0 — Installation
 
 Supports Windows and Linux and all NWN/NWN2 editions: Original NWN, Diamond,
 NWN:EE, NWN2, NWN2 EE and NWN2 with Client Extender.
 
 ## Download and install
 
-Choose from the [v1.2.3 release](https://github.com/RoleWeaver/roleweaver/releases/tag/v1.2.3).
+Choose from the [v1.3.0 release](https://github.com/RoleWeaver/roleweaver/releases/tag/v1.3.0).
 
 | Package | Installation |
 | --- | --- |
-| RoleWeaver-Setup-v1.2.3.exe | Run the Windows installer |
-| RoleWeaver-Portable-v1.2.3.zip | Extract fully and run RoleWeaver.exe |
-| RoleWeaver-NeverwinterVault-v1.2.3.zip | Windows portable build with Vault README |
-| RoleWeaver-v1.2.3-Linux.tar.gz | Extract and follow INSTALL_LINUX.md |
+| RoleWeaver-Setup-v1.3.0.exe | Run the Windows installer |
+| RoleWeaver-Portable-v1.3.0.zip | Extract fully and run RoleWeaver.exe |
+| RoleWeaver-NeverwinterVault-v1.3.0.zip | Windows portable build with Vault README |
+| RoleWeaver-v1.3.0-Linux.tar.gz | Extract and follow INSTALL_LINUX.md |
 | GitHub source archive | Windows at root; Linux under linux/ |
 
 **Packaged Windows builds do not require Python.** Keep the supplied folders with
@@ -70,17 +70,17 @@ to it and Start again. Stop before switching game editions.
 | --- | --- |
 | F6 | Pause/resume |
 | F8 | Generate editable candidate drafts |
-| F9 | Place an editable draft in game chat on supported platforms |
+| F9 | Generate one editable reply and its game-language translation |
 | F10 / AFK | Toggle Away From Keyboard |
 | F11 | Clear current conversation context |
 | F12 | Stop the client |
 
-F9 does not press the final Enter. Review the draft before sending.
+Review both draft editors and use the explicit paste control before sending.
 AFK sends an initial emote, then checks attention every 30 seconds with a
 three-minute minimum interval between follow-ups. See [AFK mode](AFK_MODE.md).
 Test keyboard delivery before enabling automatic sending.
 
-**Version 1.2.3 includes** backups, crash protection, pending-summary recovery and
+**Role Weaver includes** backups, crash protection, pending-summary recovery and
 unfinished-edit recovery. Recover Edits has Copy text, Discard and Clear all for
 Guidance, Character, Lore and AI Draft text. Read [backup/recovery](BACKUP_RECOVERY.md)
 and [edit/summary recovery](EDIT_SUMMARY_RECOVERY.md).
@@ -93,8 +93,10 @@ and history. Campaigns, settings and character preferences also contain personal
 
 1. Save a backup using the existing client's Backup control.
 2. Close with **Exit Program**.
-3. Install/extract the new version. Preserve personal data; do not replace your
-   profiles with generic examples.
+3. If your current version has an Updates tab, use it to download and verify
+   the new version. Earlier versions need a manual download. Installed Windows
+   builds can launch Setup; portable and Linux builds prepare a fresh folder
+   with copied saved data. See [Updates](UPDATES.md).
 4. If moving to a fresh folder, restore your backup. Source installations need
    their dependency-install step rerun.
 5. Verify game, live log, character and AI connection before Start.
@@ -108,4 +110,4 @@ Copying Python files beside an old executable does not update it.
   use Copy Edited Draft and paste manually.
 - Provider changes with character: provider/model preferences are per profile.
 - Continue with [First Run](FIRST_RUN.md), [Player Guide](PLAYER_GUIDE.md),
-  [DM Guide](DM_GUIDE.md) or [v1.2.3 tests](TESTING_v1.2.3.md).
+  [DM Guide](DM_GUIDE.md) or [v1.3.0 tests](TESTING_v1.3.0.md).

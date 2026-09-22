@@ -27,4 +27,6 @@ jobs:
           .venv/bin/python -B -m unittest discover -s ../tests -p 'test_update*.py' -v
           .venv/bin/python -B -m unittest discover -s tests -v
       - name: Construct GUI under virtual X11 display
-        run: xvfb-run -a .venv/bin/python -B tests/smoke_linux_gui.py
+        run: |
+          xvfb-run -a .venv/bin/python -B tests/smoke_linux_gui.py
+          xvfb-run -a .venv/bin/python -B -m unittest discover -s ../tests -p 'test_update_rehearsal.py' -v
