@@ -88,6 +88,18 @@ complete prompts, private Tells or personal filesystem paths.
 5. Run both Windows/shared and Linux suites because both clients consume the
    same parser and follower.
 
+## Adding configuration
+
+1. Add built-in fields to `RoleWeaverSettings` and `default_settings()` under
+   `src/roleweaver/config/`.
+2. Preserve unknown JSON fields so extensions can maintain their own settings.
+3. Use an explicit migration callback for renamed or transformed values; never
+   silently discard an older value.
+4. Resolve saved-data locations through `RuntimePaths` instead of constructing
+   new paths throughout GUI or provider code.
+5. Use `roleweaver.storage.atomic` for persistent writes. Direct writes can
+   bypass shutdown protection, crash recovery and backup serialization.
+
 ## Pull-request scope
 
 Keep refactors separable from behavior changes. A package extraction should

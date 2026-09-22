@@ -19,7 +19,9 @@ from roleweaver.conversation import (
     parse_chat_line,
     strip_chat_window_prefix as _strip_chat_window_prefix,
 )
+from roleweaver.config import SettingsStore, default_settings
 from roleweaver.games import GAME_VERSIONS, default_game_log, discover_game_logs, switch_game
+from roleweaver.paths import RuntimePaths
 from roleweaver_afk import AFKMixin
 from linux_platform import migrate_default_log_paths
 import copy
@@ -46,9 +48,10 @@ from linux_platform import is_wayland, copy_draft
 from openai import OpenAI
 
 
-APP_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
-SETTINGS_PATH = APP_DIR / "settings.json"
-CHARACTER_PROMPT_PATH = APP_DIR / "character_prompt.txt"
+RUNTIME_PATHS = RuntimePaths.from_entrypoint(__file__)
+APP_DIR = RUNTIME_PATHS.root
+SETTINGS_PATH = RUNTIME_PATHS.settings
+CHARACTER_PROMPT_PATH = RUNTIME_PATHS.character_prompt
 
 from linux_platform import nwn_log_directories
 
@@ -61,49 +64,7 @@ SERVER_PROFILES = {
     "AUTO": {"display_name": "Auto Detect", "default_log_path": DEFAULT_NWN_LOG_PATH},
 }
 
-DEFAULT_SETTINGS = {
-    "game_version": "nwn_ee",
-    "server_profile": "AUTO",
-    "server_log_paths": {
-        "AUTO": DEFAULT_NWN_LOG_PATH,
-    },
-    "discovered_servers": {},
-    "parser_profile": "adaptive",
-    "log_path": DEFAULT_NWN_LOG_PATH,
-    "character_name": "Example NPC",
-    "ai_provider": "Google Gemini",
-    "model": "gemini-3.7-flash",
-    "lm_studio_base_url": "http://127.0.0.1:1234",
-    "window_title_contains": "Neverwinter Nights",
-    "poll_interval_seconds": 0.10,
-    "context_messages": 30,
-    "max_reply_characters": 430,
-    "auto_reply_delay_seconds": 2.5,
-    "auto_reply_cooldown_seconds": 8.0,
-    "auto_reply_channels": ["Talk", "Whisper"],
-    "start_paused": False,
-    "auto_reply_on_start": False,
-    "focus_game_before_typing": True,
-    "keyboard_method": "x11",
-    "focus_delay_seconds": 0.60,
-    "chat_open_delay_seconds": 0.45,
-    "before_send_delay_seconds": 0.35,
-    "memory_enabled": True,
-    "summary_interval_messages": 18,
-    "memory_max_characters_per_person": 1600,
-    "interaction_history_limit": 60,
-    "memory_relevant_events_per_person": 6,
-    "story_thread_limit": 30,
-    "learned_voice_enabled": True,
-    "learned_voice_sample_limit": 80,
-    "tell_context_messages": 20,
-    "generation_timing": True,
-    "ignore_ooc_for_ai": True,
-    "response_length_mode": "Auto",
-    "candidate_count": 3,
-    "campaign_id": "default",
-    "character_mismatch_check": True,
-}
+DEFAULT_SETTINGS = default_settings(DEFAULT_NWN_LOG_PATH, keyboard_method="x11")
 
 
 def _safe_server_id(label):
@@ -259,38 +220,22 @@ def refresh_discovered_servers(settings, max_files=20):
     return settings
 
 
+def _settings_store():
+    return SettingsStore(
+        SETTINGS_PATH,
+        DEFAULT_SETTINGS,
+        known_profiles=SERVER_PROFILES,
+        migrate=migrate_default_log_paths,
+        resolve_log_path=get_server_log_path,
+    )
+
+
 def load_settings():
-    if not SETTINGS_PATH.exists():
-        storage.atomic_write_text(SETTINGS_PATH, json.dumps(DEFAULT_SETTINGS, indent=2), encoding="utf-8")
-    data = migrate_default_log_paths(json.loads(SETTINGS_PATH.read_text(encoding="utf-8")))
-    merged = dict(DEFAULT_SETTINGS)
-    merged.update(data)
-    paths = dict(DEFAULT_SETTINGS["server_log_paths"])
-    paths.update(data.get("server_log_paths", {}) or {})
-    if "server_log_paths" not in data and data.get("log_path"):
-        paths["AUTO"] = data["log_path"]
-    merged["server_log_paths"] = paths
-    if not isinstance(merged.get("discovered_servers"), dict):
-        merged["discovered_servers"] = {}
-    valid_dynamic = set(merged["discovered_servers"].keys())
-    selected = merged.get("server_profile")
-    if selected not in set(SERVER_PROFILES) | valid_dynamic:
-        # Upgrade path from earlier releases: preserve only the profile the user
-        # actually had selected. No legacy server-name catalog is shipped.
-        legacy_path = paths.get(selected) or data.get("log_path") or DEFAULT_NWN_LOG_PATH
-        merged["discovered_servers"][selected] = {
-            "display_name": str(selected),
-            "log_path": legacy_path,
-            "parser_profile": "adaptive",
-            "last_seen": "",
-        }
-        valid_dynamic.add(selected)
-    merged["log_path"] = get_server_log_path(merged, merged["server_profile"])
-    return merged
+    return _settings_store().load()
 
 
 def save_settings(settings):
-    storage.atomic_write_text(SETTINGS_PATH, json.dumps(dict(settings), indent=2), encoding="utf-8")
+    _settings_store().save(settings)
 
 
 def get_server_log_path(settings, server_profile=None):
@@ -319,7 +264,7 @@ def load_character_prompt():
     return CHARACTER_PROMPT_PATH.read_text(encoding="utf-8").strip()
 
 
-ROLEPLAY_RULES_DIR = APP_DIR / "RoleplayRules"
+ROLEPLAY_RULES_DIR = RUNTIME_PATHS.roleplay_rules
 
 
 def roleplay_rules_dir(server_profile="AUTO"):
@@ -377,7 +322,7 @@ def clear_shared_guidance():
 
 
 CHARACTER_PROFILE_PATTERN = "character_*.txt"
-CHARACTERS_DIR = APP_DIR / "Characters"
+CHARACTERS_DIR = RUNTIME_PATHS.characters
 
 
 def character_profile_dir(server_profile="AUTO"):
@@ -676,7 +621,7 @@ from roleweaver.ai import (
     normalize_lm_studio_base_url,
 )
 
-CAMPAIGNS_DIR = APP_DIR / "Campaigns"
+CAMPAIGNS_DIR = RUNTIME_PATHS.campaigns
 
 def sanitize_campaign_id(value):
     value = str(value or "default").strip()
@@ -987,7 +932,7 @@ def extract_json_object(text):
 
 
 
-LORE_DIR = APP_DIR / "Lore"
+LORE_DIR = RUNTIME_PATHS.lore
 
 
 def lore_dir(server_profile="AUTO"):

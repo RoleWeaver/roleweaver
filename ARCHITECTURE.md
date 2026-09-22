@@ -10,8 +10,11 @@ remain usable and existing character, campaign and memory data stay compatible.
 | --- | --- |
 | `src/roleweaver/` | Shared, platform-neutral application code |
 | `src/roleweaver/ai/` | Provider-independent AI contracts and built-in providers |
+| `src/roleweaver/config/` | Typed defaults, migration-aware settings loading and persistence |
 | `src/roleweaver/conversation/` | Chat event contract, NWN log parsing and resilient log following |
 | `src/roleweaver/games.py` | Game editions, log discovery and NWN2 normalization |
+| `src/roleweaver/paths.py` | Explicit runtime locations for source and packaged applications |
+| `src/roleweaver/storage/` | Atomic writes, validated backups and crash recovery |
 | `nwn_ai_gui.py` | Windows Tkinter entry point and compatibility application shell |
 | `nwn_ai_bot.py` | Windows conversation engine and compatibility exports |
 | `linux/` | Linux entry points and platform input adapter |
@@ -73,6 +76,27 @@ shared provider and conversation names that older code imports from
 `nwn_ai_bot.py`. The root and Linux `roleweaver_games.py` files redirect legacy
 imports to `roleweaver.games`, so monkey-patching and existing extensions still
 operate on the authoritative module.
+
+The legacy `roleweaver_storage`, `roleweaver_backup`, and `roleweaver_crash`
+module names similarly redirect to `roleweaver.storage`. This is a module alias,
+not a copied facade, so locks, shutdown state and monkey-patches remain shared.
+
+## Configuration and storage boundary
+
+Both desktop clients construct their defaults through `roleweaver.config` and
+inject only platform-specific values such as the default log path, keyboard
+method and Linux path migration. `SettingsStore` preserves unknown extension
+keys, merges nested server-log paths, registers legacy selected profiles and
+writes complete settings snapshots atomically.
+
+`RuntimePaths` is the authoritative description of persistent locations. The
+launchers determine the installation root; shared code derives settings,
+characters, campaigns, lore, rules, backups and application-data paths from it.
+User data remains beside the current installation for compatibility.
+
+The storage package owns the process-wide write lock, atomic replacement,
+validated backup archives and crash recovery. Higher-level character and
+campaign repositories can now be added without duplicating these guarantees.
 
 Future extractions should be small and behavior-preserving. Move shared logic,
 keep a compatibility import where necessary, add focused tests, then remove the
