@@ -9,6 +9,8 @@ from .providers import (
     create_ai_provider,
     normalize_lm_studio_base_url,
 )
+from .runtime import AIExecutionService
+from .usage import UsageStore
 
 __all__ = [
     "AI_PROVIDERS",
@@ -16,9 +18,11 @@ __all__ = [
     "AIRequestPurpose",
     "AIResult",
     "AIUsage",
+    "AIExecutionService",
     "GeminiProvider",
     "LMStudioProvider",
     "OpenAICompatibleProvider",
+    "UsageStore",
     "coerce_ai_result",
     "create_ai_provider",
     "normalize_lm_studio_base_url",

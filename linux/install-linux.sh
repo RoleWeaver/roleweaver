@@ -10,8 +10,8 @@ if [[ "$(id -u)" == 0 ]]; then
     echo 'Run this installer as your normal desktop user, without sudo.' >&2
     exit 1
 fi
-command -v python3 >/dev/null || { echo 'Install Python 3.10+; see INSTALL_LINUX.md.' >&2; exit 1; }
-python3 -c 'import sys; assert sys.version_info >= (3, 10), "Python 3.10+ is required"; import tkinter'
+command -v python3 >/dev/null || { echo 'Install Python 3.10-3.13; see INSTALL_LINUX.md.' >&2; exit 1; }
+python3 -c 'import sys; assert (3, 10) <= sys.version_info < (3, 14), "Python 3.10-3.13 is required"; import tkinter'
 tools=(xdotool xclip)
 if [[ -n "${WAYLAND_DISPLAY:-}" || "${XDG_SESSION_TYPE:-}" == wayland ]]; then
     tools=(wl-copy)

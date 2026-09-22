@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Git
-- Python 3.10 or newer; release builds currently use Python 3.12
+- Python 3.10 through 3.13; release builds currently use Python 3.12
 - Tkinter for the desktop client
 - Linux desktop tools described in `linux/INSTALL_LINUX.md` when developing on Linux
 
@@ -75,6 +75,22 @@ entry points, tests, documentation and build scripts as well.
 
 Provider exceptions should remain actionable and must never include API keys,
 complete prompts, private Tells or personal filesystem paths.
+
+## Adding a guardrail backend
+
+1. Implement `roleweaver.guardrails.GuardrailBackend` and return
+   `GuardrailResult` from input and output validation.
+2. Keep the backend independent of Tkinter and provider SDKs.
+3. Do not persist prompts, replies, Tells, translations or API keys as
+   telemetry.
+4. Route provider calls through `AIExecutionService`; direct provider calls
+   bypass both guardrails and usage reporting.
+5. Add focused tests for pass, block and degraded behavior without network
+   access.
+
+Guardrails AI is the installed default implementation. The protocol is the
+replacement boundary; it is not a switch for silently disabling validation.
+See `GUARDRAILS_AND_USAGE.md` for data retention and UI behavior.
 
 ## Adding a game-log format
 

@@ -56,5 +56,9 @@ class RuntimePaths:
         return self.root / "RoleWeaver_Data"
 
     @property
+    def usage_database(self) -> Path:
+        return self.application_data / "usage.sqlite3"
+
+    @property
     def backups(self) -> Path:
         return self.root / "Backups"

@@ -15,3 +15,9 @@ Role Weaver does not require API keys to be committed to the repository. Never p
 ## Local data
 
 Role Weaver can store character memory, conversation history, lore, profiles, and settings locally. Users are responsible for reviewing these files before sharing a Role Weaver data directory publicly.
+
+AI usage metadata is retained locally for 30 days in
+`RoleWeaver_Data/usage.sqlite3`. It contains provider/model names, request
+purpose, timing, reported token counts, guardrail outcomes, error types and
+optional cost estimates. It does not contain prompt text, generated replies,
+Tells, translations, character instructions or API keys.

@@ -48,6 +48,11 @@ class RoleWeaverSettings(TypedDict, total=False):
     candidate_count: int
     campaign_id: str
     character_mismatch_check: bool
+    guardrail_backend: str
+    guardrail_input_max_characters: int
+    guardrail_output_max_characters: int
+    usage_input_cost_per_million: float | None
+    usage_output_cost_per_million: float | None
 
 
 def default_settings(default_log_path: str, *, keyboard_method: str) -> RoleWeaverSettings:
@@ -93,4 +98,9 @@ def default_settings(default_log_path: str, *, keyboard_method: str) -> RoleWeav
         "candidate_count": 3,
         "campaign_id": "default",
         "character_mismatch_check": True,
+        "guardrail_backend": "guardrails_ai",
+        "guardrail_input_max_characters": 50000,
+        "guardrail_output_max_characters": 10000,
+        "usage_input_cost_per_million": None,
+        "usage_output_cost_per_million": None,
     }

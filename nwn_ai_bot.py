@@ -16,6 +16,7 @@ from roleweaver.conversation import (
 from roleweaver.config import SettingsStore, default_settings
 from roleweaver.games import GAME_VERSIONS, default_game_log, discover_game_logs, switch_game
 from roleweaver.paths import RuntimePaths
+from roleweaver.guardrails import GuardrailsAIBackend
 from roleweaver_afk import AFKMixin
 import copy
 from roleweaver_pending import SummaryJournal
@@ -1008,6 +1009,7 @@ def save_character_ai_settings(profile_path, settings):
 
 
 from roleweaver.ai import (
+    AIExecutionService,
     AI_PROVIDERS,
     AIRequest,
     AIRequestPurpose,
@@ -1016,6 +1018,7 @@ from roleweaver.ai import (
     GeminiProvider,
     LMStudioProvider,
     OpenAICompatibleProvider,
+    UsageStore,
     coerce_ai_result,
     create_ai_provider,
     normalize_lm_studio_base_url,
@@ -1476,6 +1479,8 @@ class NWNAIBot(AFKMixin):
         self.settings = settings
         self.character_prompt = character_prompt
         self.client = client
+        self.usage_store = UsageStore(APP_DIR / "RoleWeaver_Data" / "usage.sqlite3")
+        self.ai_execution = AIExecutionService(client, settings, self.usage_store)
 
         self.stop_event = threading.Event()
         self.paused = bool(settings.get("start_paused", False))
@@ -1560,19 +1565,7 @@ class NWNAIBot(AFKMixin):
             prompt=prompt,
             purpose=purpose,
         )
-        started = time.perf_counter()
-        raw = self.client.generate(request)
-        result = coerce_ai_result(
-            raw,
-            provider=getattr(
-                self.client,
-                "provider_name",
-                self.settings.get("ai_provider", ""),
-            ),
-            model=getattr(self.client, "model", self.settings.get("model", "")),
-            purpose=purpose,
-            duration_seconds=time.perf_counter() - started,
-        )
+        result = self.ai_execution.generate(request)
         self.last_ai_result = result
         return result
 

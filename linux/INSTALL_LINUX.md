@@ -20,7 +20,7 @@ Open a terminal in the client folder and run as your normal desktop user:
     bash install-linux.sh
     bash start-role-weaver.sh
 
-Python 3.10+ is required. The installer creates .venv and downloads dependencies.
+Python 3.10 through 3.13 is required. The installer creates `.venv` and downloads dependencies.
 Do not run these two scripts as root.
 
 ## X11 and Wayland

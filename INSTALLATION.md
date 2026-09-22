@@ -21,7 +21,7 @@ data before upgrading. Checksum files accompany the downloads.
 
 ## Windows from source
 
-Install Python 3.10+ with Tkinter; release builds use Python 3.12.
+Install Python 3.10 through 3.13 with Tkinter; release builds use Python 3.12.
 In Command Prompt, change to the source root and run:
 
     python -m venv .venv

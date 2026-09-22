@@ -24,6 +24,7 @@ Read [release notes](RELEASE_NOTES_v1.2.3.md) and [NWN2 logging](NWN2_LOGGING.md
 - Linux source and launchers are in [linux/](linux/README.md), preserving X11 and Ubuntu Wayland support.
 - [Backup and crash recovery](BACKUP_RECOVERY.md): atomic saves, rotating backups, startup recovery and safe restoration.
 - [Edit and summary recovery](EDIT_SUMMARY_RECOVERY.md): autosaving Guidance, Character, Lore and AI Draft text; resuming pending summary batches without applying them twice.
+- [Guardrails and AI usage](GUARDRAILS_AND_USAGE.md): local input/output checks plus request, token and estimated-cost monitoring.
 - [Client fixes and acceptance checks](FEEDBACK_FIXES.md): quieter backups, Auto log selection, copy/clear recovery controls and Exit Program.
 
 ## Download for Windows
@@ -123,6 +124,7 @@ See **AUTOMATIC_LOG_DETECTION.md** for the automatic detection and adaptive-pars
 - **BUILDING_WINDOWS.md** — Windows builds and releases
 - **DEVELOPMENT.md** — editable setup, tests and development packages
 - **ARCHITECTURE.md** — package boundaries and contributor-oriented design
+- **GUARDRAILS_AND_USAGE.md** — guardrail settings, usage charts and local telemetry
 
 ## Development package
 
@@ -135,6 +137,9 @@ instead of duplicating it between the Windows and Linux entry points.
 ## Privacy and API keys
 
 Role Weaver reads the NWN client log you configure. When using a hosted provider, relevant roleplay context is sent to that provider to generate a response. LM Studio can instead use a locally hosted model.
+
+The local usage database stores request metadata and token counts, not prompts,
+replies, Tells, translations or API keys. See **GUARDRAILS_AND_USAGE.md**.
 
 **Never commit, upload, screenshot, or send your Gemini/OpenAI API key to anyone.** Role Weaver does not ship with API keys. If a key is exposed, revoke it with the provider and create a new one.
 

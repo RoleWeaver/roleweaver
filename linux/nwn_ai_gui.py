@@ -610,6 +610,7 @@ class NWNAIApp:
         continuity_frame = ttk.Frame(lower_tabs, padding=7)
         adaptive_frame = ttk.Frame(lower_tabs, padding=7)
         history_frame = ttk.Frame(lower_tabs, padding=7)
+        guardrail_frame = ttk.Frame(lower_tabs, padding=7)
         lower_tabs.add(draft_frame, text="AI Draft")
         lower_tabs.add(context_frame, text="AI Context")
         lower_tabs.add(relationship_frame, text="Relationships")
@@ -618,6 +619,8 @@ class NWNAIApp:
         lower_tabs.add(continuity_frame, text="Continuity")
         lower_tabs.add(adaptive_frame, text="Adaptive")
         lower_tabs.add(history_frame, text="History")
+        lower_tabs.add(guardrail_frame, text="Guardrails & Usage")
+        self._build_guardrails_usage_tab(guardrail_frame)
 
         candidate_bar = ttk.Frame(draft_frame)
         candidate_bar.pack(fill="x", pady=(0, 6))
@@ -1097,6 +1100,78 @@ class NWNAIApp:
         ttk.Button(
             bottom, text="Clear Activity Display", command=self.clear_activity_display
         ).pack(side="right")
+
+    def _build_guardrails_usage_tab(self, frame):
+        toolbar = ttk.Frame(frame)
+        toolbar.pack(fill="x")
+        self.usage_window_var = tk.StringVar(value="24h")
+        ttk.Label(toolbar, text="Window:").pack(side="left")
+        ttk.Combobox(toolbar, textvariable=self.usage_window_var, values=["session", "24h", "7d", "30d"], state="readonly", width=9).pack(side="left", padx=6)
+        self.usage_metric_var = tk.StringVar(value="Tokens")
+        ttk.Label(toolbar, text="Chart:").pack(side="left", padx=(10, 0))
+        metric_combo = ttk.Combobox(toolbar, textvariable=self.usage_metric_var, values=["Requests", "Tokens", "Estimated cost"], state="readonly", width=15)
+        metric_combo.pack(side="left", padx=6)
+        metric_combo.bind("<<ComboboxSelected>>", lambda _event: self._refresh_guardrails_usage())
+        ttk.Button(toolbar, text="Refresh", command=self._refresh_guardrails_usage).pack(side="left")
+        ttk.Button(toolbar, text="Save settings", command=self._save_guardrail_settings).pack(side="right")
+        self.guardrail_status_var = tk.StringVar(value="Checking Guardrails AI...")
+        ttk.Label(frame, textvariable=self.guardrail_status_var, wraplength=760).pack(fill="x", pady=(7, 5))
+        self.usage_summary_var = tk.StringVar(value="No usage recorded.")
+        ttk.Label(frame, textvariable=self.usage_summary_var, font=("Segoe UI", 10, "bold")).pack(fill="x", pady=(0, 5))
+        self.usage_canvas = tk.Canvas(frame, height=125, bg="#1e1f22", highlightthickness=0)
+        self.usage_canvas.pack(fill="x", expand=False, pady=(0, 7))
+        settings = ttk.LabelFrame(frame, text="Policy and cost settings", padding=7)
+        settings.pack(fill="x")
+        self.guardrail_input_limit_var = tk.StringVar(value=str(self.settings.get("guardrail_input_max_characters", 50000)))
+        self.guardrail_output_limit_var = tk.StringVar(value=str(self.settings.get("guardrail_output_max_characters", 10000)))
+        self.usage_input_rate_var = tk.StringVar(value="" if self.settings.get("usage_input_cost_per_million") is None else str(self.settings["usage_input_cost_per_million"]))
+        self.usage_output_rate_var = tk.StringVar(value="" if self.settings.get("usage_output_cost_per_million") is None else str(self.settings["usage_output_cost_per_million"]))
+        fields = [("Maximum input characters", self.guardrail_input_limit_var), ("Maximum output characters", self.guardrail_output_limit_var), ("Input USD / million tokens", self.usage_input_rate_var), ("Output USD / million tokens", self.usage_output_rate_var)]
+        for row, (label, variable) in enumerate(fields):
+            ttk.Label(settings, text=label + ":").grid(row=row, column=0, sticky="w", pady=2)
+            ttk.Entry(settings, textvariable=variable, width=16).grid(row=row, column=1, sticky="w", padx=(8, 0), pady=2)
+        ttk.Label(settings, text="Costs are estimates using rates you enter. Unknown pricing is never shown as zero. No prompts, replies, Tells, translations, or API keys are stored in usage records.", wraplength=700).grid(row=0, column=2, rowspan=4, sticky="nw", padx=(18, 0))
+        settings.columnconfigure(2, weight=1)
+        self.root.after_idle(self._refresh_guardrails_usage)
+
+    def _save_guardrail_settings(self):
+        try:
+            input_limit = int(self.guardrail_input_limit_var.get()); output_limit = int(self.guardrail_output_limit_var.get())
+            if not 1 <= input_limit <= 1000000 or not 1 <= output_limit <= 1000000: raise ValueError("Character limits must be between 1 and 1,000,000.")
+            rates = []
+            for variable in (self.usage_input_rate_var, self.usage_output_rate_var):
+                raw = variable.get().strip(); value = None if not raw else float(raw)
+                if value is not None and not 0 <= value <= 10000: raise ValueError("Token rates must be between 0 and 10,000 USD per million.")
+                rates.append(value)
+            self.settings.update(guardrail_input_max_characters=input_limit, guardrail_output_max_characters=output_limit, usage_input_cost_per_million=rates[0], usage_output_cost_per_million=rates[1])
+            core.save_settings(self.settings); messagebox.showinfo("Guardrails", "Guardrail and usage settings saved. Guardrail limits apply on the next Start."); self._refresh_guardrails_usage()
+        except Exception as exc: messagebox.showerror("Guardrails", str(exc))
+
+    def _refresh_guardrails_usage(self):
+        try:
+            execution = self.bot.ai_execution if self.bot else None
+            backend = execution.guardrails if execution else core.GuardrailsAIBackend(self.settings.get("guardrail_input_max_characters", 50000), self.settings.get("guardrail_output_max_characters", 10000))
+            status = backend.status()
+            self.guardrail_status_var.set(f"Guardrails AI {status.get('version') or ''} is active. Backend: {status.get('backend')}." if status.get("available") else "DEGRADED: " + status.get("error", "Guardrails AI is unavailable."))
+            store = self.bot.usage_store if self.bot else core.UsageStore(core.APP_DIR / "RoleWeaver_Data" / "usage.sqlite3")
+            report = store.report(self.usage_window_var.get(), session=execution.session if execution else "")
+            cost = f"${report['estimated_cost']:.6f} estimated" if report["priced_requests"] else "cost unknown"
+            self.usage_summary_var.set(f"{report['requests']} requests • {report['total_tokens']:,} reported tokens • {report['unknown_token_requests']} without token data • {report['blocked']} blocked • {cost}")
+            self._draw_usage_chart(report["by_purpose"], self.usage_metric_var.get())
+        except Exception as exc: self.guardrail_status_var.set(f"Usage display error: {type(exc).__name__}: {exc}")
+
+    def _draw_usage_chart(self, groups, metric):
+        canvas = self.usage_canvas; canvas.delete("all"); width = max(canvas.winfo_width(), 500); items = sorted(groups.items())
+        if not items: canvas.create_text(12, 15, text="No usage in this window.", fill="#b5bac1", anchor="nw"); return
+        keys = {"Requests": "requests", "Tokens": "tokens", "Estimated cost": "estimated_cost"}
+        key = keys.get(metric, "tokens"); maximum = max(float(values[key]) for _, values in items) or 1.0; bar_width = max(34, (width - 30) // len(items) - 12)
+        for index, (name, values) in enumerate(items):
+            x1 = 18 + index * (bar_width + 12); value = float(values[key]); bar_height = int(75 * value / maximum)
+            canvas.create_rectangle(x1, 88 - bar_height, x1 + bar_width, 88, fill="#5865f2", outline="")
+            canvas.create_text(x1 + bar_width / 2, 96, text=name[:13], fill="#dbdee1", anchor="n")
+            label = f"${value:.6f}" if key == "estimated_cost" else f"{int(value):,}"
+            if key == "estimated_cost" and not values["priced_requests"]: label = "unknown"
+            canvas.create_text(x1 + bar_width / 2, 84 - bar_height, text=label, fill="#b5bac1", anchor="s")
 
     def _load_initial_values(self):
         # Server must be selected before scanning character profiles because

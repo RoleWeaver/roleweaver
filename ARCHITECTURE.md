@@ -10,6 +10,7 @@ remain usable and existing character, campaign and memory data stay compatible.
 | --- | --- |
 | `src/roleweaver/` | Shared, platform-neutral application code |
 | `src/roleweaver/ai/` | Provider-independent AI contracts and built-in providers |
+| `src/roleweaver/guardrails/` | Replaceable dialogue-safety boundary and Guardrails AI adapter |
 | `src/roleweaver/config/` | Typed defaults, migration-aware settings loading and persistence |
 | `src/roleweaver/conversation/` | Chat event contract, NWN log parsing and resilient log following |
 | `src/roleweaver/games.py` | Game editions, log discovery and NWN2 normalization |
@@ -56,6 +57,18 @@ remain `None`; callers must not present them as zero.
 The supported purposes are reply, candidate generation, memory summary, AFK,
 translation and connection test. Translation is included in the contract now so
 it can use the same monitoring and guardrail path later.
+
+`AIExecutionService` is the common runtime boundary around providers. It checks
+input through a `GuardrailBackend`, invokes the provider, normalizes the result,
+checks output and writes content-free usage metadata. The shipped backend is
+Guardrails AI, but the protocol keeps that implementation replaceable. The
+client has no runtime, configuration, database or service dependency on the
+separate Role Weaver server addon.
+
+Usage telemetry is stored locally in `RoleWeaver_Data/usage.sqlite3` with a
+30-day retention period. It records request metadata, reported token counts,
+guardrail actions and optional cost estimates. It never stores prompt or reply
+text. See `GUARDRAILS_AND_USAGE.md` for the user and extension contract.
 
 ## Conversation boundary
 

@@ -52,6 +52,8 @@ python -m PyInstaller `
     --name "RoleWeaver" `
     --icon "assets\RoleWeaver.ico" `
     --paths "src" `
+    --collect-all "guardrails" `
+    --collect-all "guardrails_ai.regex_match" `
     @addData `
     nwn_ai_gui.py
 

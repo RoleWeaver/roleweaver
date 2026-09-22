@@ -7,7 +7,7 @@ name = "roleweaver-client"
 dynamic = ["version"]
 description = "Shared development package for the Role Weaver Neverwinter Nights client"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.14"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{name = "RoleWeaver"}]
@@ -25,6 +25,8 @@ dependencies = [
     "pyperclip>=1.8.2",
     "pynput>=1.7.7",
     "pyautogui>=0.9.54; sys_platform == 'win32'",
+    "guardrails-ai==0.11.0",
+    "guardrails-ai-regex-match==0.1.0",
 ]
 
 [project.optional-dependencies]
@@ -52,6 +54,7 @@ include = [
     "tests/test_ai_contracts.py",
     "tests/test_config_storage_contracts.py",
     "tests/test_conversation_contracts.py",
+    "tests/test_guardrails_usage.py",
 ]
 
 [tool.ruff.lint]
