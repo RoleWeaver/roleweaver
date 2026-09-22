@@ -82,6 +82,8 @@ For more detail, including LM Studio, see **AI_PROVIDER_SETUP.md**.
 - Learned voice based on IC dialogue actually sent through NWN.
 - Correction learning and player-approved Character Development.
 - Guidance for steering a scene without rewriting the character profile.
+- An optional Response Seed for supplying dialogue or wording that F8/F9 should
+  naturally incorporate into generated replies.
 - Visible AI Context so you can inspect what roleplay material was supplied.
 
 ### Dungeon Masters
@@ -104,6 +106,12 @@ For more detail, including LM Studio, see **AI_PROVIDER_SETUP.md**.
 | **F12** | Stop Role Weaver |
 
 F9 deliberately leaves the final Enter to the player/DM so the reply can be reviewed and edited in NWN.
+
+Enter character wording, dialogue or an opening emote in **Response Seed** below
+the Guidance panel. F8 incorporates it into every candidate and F9 incorporates
+it into the generated NWN draft. The seed remains available for regeneration
+until **Clear Seed** is pressed. Leave it empty for the original chat-only
+generation behavior.
 
 ## Automatic world and log detection
 

@@ -14,7 +14,12 @@ from pathlib import Path, PurePosixPath
 from . import atomic as storage
 
 DIRECTORIES = {"Characters", "Lore", "Campaigns", "RoleplayRules", "RoleWeaver_Data"}
-FILES = {"settings.json", "character_prompt.txt", "next_guidance.txt"}
+FILES = {
+    "settings.json",
+    "character_prompt.txt",
+    "next_guidance.txt",
+    "next_response_seed.txt",
+}
 MAX_BYTES = 1024 * 1024 * 1024
 MAX_FILES = 20000
 

@@ -491,6 +491,20 @@ class NWNAIApp:
         ).pack(anchor="w", pady=(6, 0))
         self.guidance_text.bind("<Control-Return>", self._ctrl_enter_guidance)
 
+        seed_frame = ttk.LabelFrame(left, text="Response Seed (optional)", padding=8)
+        seed_frame.pack(fill="x", padx=8, pady=(0, 7))
+        self.response_seed_text = tk.Text(
+            seed_frame, height=2, wrap="word", undo=True,
+            bg="#1e1f22", fg="#dbdee1", insertbackground="#dbdee1",
+            selectbackground="#5865f2", selectforeground="#ffffff",
+            relief="flat", bd=0, padx=7, pady=6,
+        )
+        self.response_seed_text.pack(fill="x")
+        self.response_seed_text.bind("<<Modified>>", self._on_response_seed_modified)
+        seed_buttons = ttk.Frame(seed_frame); seed_buttons.pack(fill="x", pady=(8, 0))
+        ttk.Label(seed_buttons, text="Saved automatically; used until cleared.").pack(side="left")
+        ttk.Button(seed_buttons, text="Clear Seed", command=self.clear_response_seed).pack(side="right")
+
         # Main controls
         controls = ttk.LabelFrame(left, text="Controls", padding=8)
         controls.pack(fill="x", padx=8, pady=(0, 7))
@@ -1347,6 +1361,10 @@ class NWNAIApp:
             self.guidance_text.insert("1.0", current_guide)
             self.guidance_text.edit_modified(False)
             self.guide_status_var.set("Guidance active until cleared.")
+        response_seed = core.read_shared_response_seed()
+        if response_seed:
+            self.response_seed_text.insert("1.0", response_seed)
+            self.response_seed_text.edit_modified(False)
         self._append_log("UI ready. Click Start to begin watching the NWN log.")
 
     def _refresh_character_profiles(self, initial=False, load_ai_settings=True):
@@ -2483,6 +2501,21 @@ class NWNAIApp:
         self.guide_status_var.set("No guidance active.")
         self._append_log("[GUIDE] Persistent guidance cleared.")
 
+    def _on_response_seed_modified(self, event=None):
+        if not self.response_seed_text.edit_modified(): return
+        value = self.response_seed_text.get("1.0", "end").strip()
+        core.write_shared_response_seed(value)
+        self.response_seed_text.edit_modified(False)
+
+    def save_response_seed(self):
+        value = self.response_seed_text.get("1.0", "end").strip(); core.write_shared_response_seed(value)
+        self.response_seed_text.edit_modified(False)
+
+    def clear_response_seed(self):
+        if core.clear_shared_response_seed():
+            self.response_seed_text.delete("1.0", "end"); self.response_seed_text.edit_modified(False)
+            self._append_log("[SEED] Response seed cleared.")
+
     def _on_length_mode_changed(self, event=None):
         mode = self.length_mode_var.get() or "Auto"
         self.settings["response_length_mode"] = mode
@@ -3432,6 +3465,7 @@ class NWNAIApp:
     def _request_draft_variant(self, variant):
         if self.bot:
             self.set_guidance_if_changed()
+            self.save_response_seed()
             self.bot.action_queue.put(("draft_variant", variant))
 
     def regenerate_draft(self):
@@ -3465,11 +3499,13 @@ class NWNAIApp:
     def generate_draft(self):
         if self.bot:
             self.set_guidance_if_changed()
+            self.save_response_seed()
             self.bot.action_queue.put(("suggest", "ui"))
 
     def generate_to_nwn(self):
         if self.bot:
             self.set_guidance_if_changed()
+            self.save_response_seed()
             self._append_log("[F9] Generating. When the reply is ready, click NWN during the 2-second countdown.")
             self.bot.action_queue.put(("generate_and_send", "manual"))
 

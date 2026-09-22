@@ -15,7 +15,7 @@ Automatic protection is enabled when you launch the updated desktop client. Ther
 
 Use **Settings > Backup** before pressing Start. After a session, restart the client before using these manual controls. Automatic backups continue during sessions.
 
-Manual ZIPs include saved settings, characters, lore, campaigns, rules, persistent memory, conversation history, legacy character prompt and next guidance. Manual restore validates the archive, preserves a recovery copy, replaces matching files and closes the client; reopen it afterward. Recovery copies use the same merge behavior: they do not delete files added after the original backup.
+Manual ZIPs include saved settings, characters, lore, campaigns, rules, persistent memory, conversation history, legacy character prompt, next guidance and the response seed. Manual restore validates the archive, preserves a recovery copy, replaces matching files and closes the client; reopen it afterward. Recovery copies use the same merge behavior: they do not delete files added after the original backup.
 
 Archives are not encrypted and can contain private roleplay data and personal paths. Environment variables and API keys entered only in the provider field are not included. Each backup is limited to 1 GiB uncompressed and 20,000 files. Linked files, unsafe/duplicate paths and checksum mismatches are rejected. Checksums verify integrity, not authenticity.
 

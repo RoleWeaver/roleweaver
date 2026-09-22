@@ -89,6 +89,10 @@ If the Guardrails AI library cannot initialize, the page reports **DEGRADED**
 and Role Weaver retains a small built-in safety fallback. Packaged releases and
 supported source installations include Guardrails AI by default.
 
+Response seeds are included in the guarded LLM input just like recent chat and
+Guidance. A seed that triggers an input policy is handled before any provider
+request is made.
+
 The application depends on the `GuardrailBackend` protocol rather than directly
 on Guardrails AI. Developers can replace the implementation without changing
 providers, the conversation engine, usage storage or UI reporting.
@@ -104,8 +108,8 @@ Policy event rows contain only timestamp, request purpose, input/output
 direction, category, action and backend. They contain no reason text or matched
 content.
 
-The usage database does **not** store prompts, generated replies, Tells,
-translations, character instructions or API keys. Deleting `usage.sqlite3`
+The usage database does **not** store prompts, response seeds, generated replies,
+Tells, translations, character instructions or API keys. Deleting `usage.sqlite3`
 clears the usage history; Role Weaver creates a new empty database when needed.
 
 ## Developer integration

@@ -17,6 +17,7 @@ class BackupTests(unittest.TestCase):
         self.root = Path(self.temp.name) / "app"
         self.root.mkdir()
         (self.root / "settings.json").write_text('{"character_name":"Original"}')
+        (self.root / "next_response_seed.txt").write_text("A saved opening line")
         (self.root / "Characters").mkdir()
         (self.root / "Characters" / "hero.txt").write_text("Original hero")
         self.archive = Path(self.temp.name) / "backup.zip"
@@ -24,10 +25,15 @@ class BackupTests(unittest.TestCase):
     def test_round_trip_and_recovery(self):
         backup.create_backup(self.root, self.archive)
         (self.root / "Characters" / "hero.txt").write_text("Changed")
+        (self.root / "next_response_seed.txt").write_text("Changed seed")
         (self.root / "Characters" / "new.txt").write_text("Keep me")
         recovery = backup.restore_backup(self.root, self.archive)
         self.assertEqual((self.root / "Characters" / "hero.txt").read_text(), "Original hero")
         self.assertEqual((self.root / "Characters" / "new.txt").read_text(), "Keep me")
+        self.assertEqual(
+            (self.root / "next_response_seed.txt").read_text(),
+            "A saved opening line",
+        )
         with zipfile.ZipFile(recovery) as z:
             self.assertEqual(z.read("Characters/hero.txt"), b"Changed")
         backup.restore_backup(self.root, recovery)

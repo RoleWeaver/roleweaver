@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import queue
 import threading
+from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
@@ -58,6 +59,65 @@ class ClientFixTests(unittest.TestCase):
         self.assertNotIn("edit_recovery.offer", self.source)
         self.assertIn('self.edit_recovery.track(self.guidance_text, "Guidance")', self.source)
         self.assertIn('self.edit_recovery.track(self.ai_draft_text, "AI Draft")', self.source)
+
+    def test_response_seed_is_persistent_and_added_to_f8_and_f9_prompts(self):
+        seed = "*Elara glances toward the door.* I noticed you arrived late."
+        self.assertTrue(self.core.write_shared_response_seed(seed))
+        self.assertEqual(self.core.read_shared_response_seed(), seed)
+        bot = self.fixture.bot()
+        event = {
+            "speaker": "Alice",
+            "channel": "Talk",
+            "message": "Is something wrong?",
+            "self": False,
+            "_mode": "IC",
+        }
+        bot.context.append(event)
+        bot.last_external_event = event
+        bot.request_ai = Mock(
+            return_value=SimpleNamespace(
+                text="I noticed you arrived late.",
+                duration_seconds=0.1,
+                model="test-model",
+            )
+        )
+
+        self.assertEqual(bot.generate_reply(), "I noticed you arrived late.")
+        reply_prompt = bot.request_ai.call_args.args[1]
+        self.assertIn("PLAYER RESPONSE SEED", reply_prompt)
+        self.assertIn(seed, reply_prompt)
+
+        bot.request_ai.reset_mock()
+        bot.request_ai.return_value = SimpleNamespace(
+            text='{"candidates":["First candidate","Second candidate"]}',
+            duration_seconds=0.1,
+            model="test-model",
+        )
+        self.assertEqual(
+            bot.generate_candidates(), ["First candidate", "Second candidate"]
+        )
+        candidate_prompt = bot.request_ai.call_args.args[1]
+        self.assertIn("PLAYER RESPONSE SEED FOR THESE REPLIES", candidate_prompt)
+        self.assertIn(seed, candidate_prompt)
+
+        self.assertTrue(self.core.clear_shared_response_seed())
+        self.assertEqual(self.core.read_shared_response_seed(), "")
+
+    def test_response_seed_is_disabled_for_automatic_replies(self):
+        bot = self.fixture.bot()
+        bot.auto_reply = True
+        seed_scopes = []
+        bot.generate_reply = Mock(
+            side_effect=lambda: seed_scopes.append(
+                bot._use_response_seed_for_reply
+            )
+        )
+
+        bot.generate_and_send(source="auto")
+
+        bot.generate_reply.assert_called_once_with()
+        self.assertEqual(seed_scopes, [False])
+        self.assertTrue(bot._use_response_seed_for_reply)
 
     def test_clear_all_removes_recovery_only_and_cancels_pending(self):
         recovery = DraftRecovery(Mock(settings={}), self.root)

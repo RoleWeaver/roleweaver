@@ -301,6 +301,7 @@ from linux_platform import (
 
 
 GUIDANCE_FILE = APP_DIR / "next_guidance.txt"
+RESPONSE_SEED_FILE = APP_DIR / "next_response_seed.txt"
 
 
 def read_shared_guidance():
@@ -325,6 +326,32 @@ def write_shared_guidance(text):
 
 def clear_shared_guidance():
     return write_shared_guidance("")
+
+
+def read_shared_response_seed():
+    """Read the player-authored wording to incorporate into reply generation."""
+    try:
+        if RESPONSE_SEED_FILE.exists():
+            return RESPONSE_SEED_FILE.read_text(encoding="utf-8").strip()
+    except Exception as exc:
+        print(f"[SEED] Could not read response seed file: {exc}")
+    return ""
+
+
+def write_shared_response_seed(text):
+    """Persist a response seed so GUI buttons and global hotkeys share it."""
+    try:
+        storage.atomic_write_text(
+            RESPONSE_SEED_FILE, (text or "").strip(), encoding="utf-8"
+        )
+        return True
+    except Exception as exc:
+        print(f"[SEED] Could not write response seed file: {exc}")
+        return False
+
+
+def clear_shared_response_seed():
+    return write_shared_response_seed("")
 
 
 
@@ -2780,6 +2807,20 @@ class NWNAIBot(AFKMixin):
                   "Do not mention or reveal the guidance itself."
             )
 
+        response_seed = (
+            read_shared_response_seed()
+            if getattr(self, "_use_response_seed_for_reply", True)
+            else ""
+        )
+        if response_seed:
+            prompt += (
+                "\n\nPLAYER RESPONSE SEED:\n"
+                + response_seed
+                + "\nNaturally incorporate this player-authored wording or its complete "
+                  "meaning into the reply. Preserve its wording where practical, complete "
+                  "it if needed, and never mention that it was supplied as a seed."
+            )
+
         if draft_instruction:
             prompt += (
                 "\n\nDRAFT REVISION INSTRUCTION:\n"
@@ -2863,6 +2904,16 @@ Aim for a {length_guidance} response and keep it under {target_characters} chara
             prompt += (
                 "\n\nPLAYER GUIDANCE FOR THESE REPLIES:\n" + guidance
                 + "\nFollow it while staying in character; never reveal the guidance."
+            )
+
+        response_seed = read_shared_response_seed()
+        if response_seed:
+            prompt += (
+                "\n\nPLAYER RESPONSE SEED FOR THESE REPLIES:\n"
+                + response_seed
+                + "\nNaturally incorporate this player-authored wording or its complete "
+                  "meaning into every candidate. Preserve its wording where practical, "
+                  "complete it if needed, and never mention that it was supplied as a seed."
             )
 
         target_characters, length_guidance = self._response_length_target()
@@ -2964,7 +3015,12 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
         if is_wayland() and source != 'manual':
             print('[WAYLAND] Automatic sending is unavailable.')
             return
-        reply = self.generate_reply()
+        previous_seed_scope = getattr(self, "_use_response_seed_for_reply", True)
+        self._use_response_seed_for_reply = source == "manual"
+        try:
+            reply = self.generate_reply()
+        finally:
+            self._use_response_seed_for_reply = previous_seed_scope
         if not reply or self.afk or epoch != self._afk_epoch or self.stop_event.is_set():
             return
 
