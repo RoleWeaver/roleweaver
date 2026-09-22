@@ -3134,6 +3134,7 @@ class NWNAIApp:
         follower = core.LogFollower(
             settings["log_path"],
             float(settings["poll_interval_seconds"]),
+            game_language=lambda: bot.settings.get("game_language", "English"),
         )
         try:
             for line in follower.lines(bot.stop_event):

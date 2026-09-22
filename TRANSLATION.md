@@ -80,3 +80,9 @@ incoming auto-detection, and protected terminology. F8 candidates and F9 replies
 are drafted in the user's language. A second editable editor contains the game-
 language translation. The player explicitly translates again after editing the
 first draft, then reviews the game-language draft before pasting it into NWN.
+
+For older NWN logs, the game language also selects the character encoding used
+when a line is not UTF-8. Spanish, German, French, Italian, and Dutch use
+Windows-1252; Polish uses Windows-1250; Russian uses Windows-1251. Changes to
+the game language apply to newly received lines during a running session.
+Mixed legacy encodings in one log cannot always be distinguished reliably.
