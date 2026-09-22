@@ -12,6 +12,7 @@ Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
 $addData = @(
     "--add-data=assets;assets",
     "--add-data=Characters;Characters",
+    "--add-data=Campaigns/README.md;Campaigns",
     "--add-data=Lore;Lore",
     "--add-data=RoleplayRules;RoleplayRules",
     "--add-data=README.md;.",
