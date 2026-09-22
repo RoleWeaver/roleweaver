@@ -39,11 +39,11 @@ This works particularly well when:
 - you want to compare a cautious, warm, humorous, or confrontational response;
 - a long-running relationship has accumulated more history than you can easily recall.
 
-### F9: fast editable response
+### F9: translated editable response
 
-Use **F9** when you want Role Weaver to generate a response and place it directly in the NWN chat field.
+Use **F9** to generate one response in your language and translate it into the configured game language.
 
-Role Weaver intentionally leaves the final Enter press to you. Read the line first. Change anything that does not sound like your character.
+Edit either stage as needed. If you change the user-language draft, press **Translate Draft** again. Review the game-language draft before pasting it into NWN.
 
 ## Persistent Guidance
 

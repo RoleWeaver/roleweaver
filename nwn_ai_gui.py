@@ -192,6 +192,8 @@ class NWNAIApp:
         self.context_event_lookup = {}
         self.last_context_event_signature = None
         self.last_seen_candidate_version = -1
+        self.last_seen_translation_version = -1
+        self.last_seen_translated_draft_version = -1
 
         self.settings = core.load_settings()
         self.character_prompt = ""
@@ -201,6 +203,7 @@ class NWNAIApp:
         self.edit_recovery = DraftRecovery(self, core.APP_DIR)
         self.edit_recovery.track(self.guidance_text, "Guidance")
         self.edit_recovery.track(self.ai_draft_text, "AI Draft")
+        self.edit_recovery.track(self.translated_draft_text, "Game-language Draft")
         self._poll_output()
         self._poll_bot_state()
         self._poll_guidance_file()
@@ -502,26 +505,6 @@ class NWNAIApp:
         ).pack(anchor="w", pady=(6, 0))
         self.guidance_text.bind("<Control-Return>", self._ctrl_enter_guidance)
 
-        seed_frame = ttk.LabelFrame(left, text="Response Seed (optional)", padding=8)
-        seed_frame.pack(fill="x", padx=8, pady=(0, 7))
-        self.response_seed_text = tk.Text(
-            seed_frame, height=2, wrap="word", undo=True,
-            bg="#1e1f22", fg="#dbdee1", insertbackground="#dbdee1",
-            selectbackground="#5865f2", selectforeground="#ffffff",
-            relief="flat", bd=0, padx=7, pady=6,
-        )
-        self.response_seed_text.pack(fill="x")
-        self.response_seed_text.bind("<<Modified>>", self._on_response_seed_modified)
-        seed_buttons = ttk.Frame(seed_frame)
-        seed_buttons.pack(fill="x", pady=(8, 0))
-        ttk.Label(
-            seed_buttons,
-            text="Saved automatically; used until cleared.",
-        ).pack(side="left")
-        ttk.Button(
-            seed_buttons, text="Clear Seed", command=self.clear_response_seed
-        ).pack(side="right")
-
         # Main controls
         controls = ttk.LabelFrame(left, text="Controls", padding=8)
         controls.pack(fill="x", padx=8, pady=(0, 7))
@@ -558,7 +541,7 @@ class NWNAIApp:
 
         self.f9_btn = ttk.Button(
             row2,
-            text="Draft into NWN (F9)",
+            text="Generate + Translate (F9)",
             command=self.generate_to_nwn,
             state="disabled",
             style="Accent.TButton",
@@ -583,7 +566,7 @@ class NWNAIApp:
 
         ttk.Label(
             controls,
-            text="F8 creates drafts here. F9: after generation, click NWN during the 2-second countdown; the draft is pasted but not sent.",
+            text="F8 creates candidates; F9 creates one reply. Translate, edit, then paste the game-language draft into NWN.",
             wraplength=320,
         ).pack(anchor="w", pady=(8, 0))
 
@@ -599,13 +582,23 @@ class NWNAIApp:
         )
         right_split.pack(fill="both", expand=True)
 
-        activity = ttk.LabelFrame(right_split, text="Activity / Conversation", padding=7)
+        upper_workspace = ttk.Frame(right_split)
         lower_workspace = ttk.Frame(right_split)
 
         # Activity starts smaller so the draft workspace is immediately visible.
-        right_split.add(activity, minsize=150, height=285, stretch="always")
+        right_split.add(upper_workspace, minsize=150, height=285, stretch="always")
         right_split.add(lower_workspace, minsize=250, height=390, stretch="always")
         self.root.after_idle(lambda: right_split.sash_place(0, 0, 285))
+
+        upper_split = tk.PanedWindow(
+            upper_workspace, orient="horizontal", sashwidth=7, sashrelief="flat",
+            bg="#1e1f22", bd=0, relief="flat",
+        )
+        upper_split.pack(fill="both", expand=True)
+        activity = ttk.LabelFrame(upper_split, text="Activity / Conversation", padding=7)
+        translation = ttk.LabelFrame(upper_split, text="Translation", padding=7)
+        upper_split.add(activity, minsize=280, stretch="always")
+        upper_split.add(translation, minsize=280, stretch="always")
 
         self.log_text = tk.Text(
             activity,
@@ -629,6 +622,40 @@ class NWNAIApp:
         self.log_text.pack(side="left", fill="both", expand=True)
         scroll.pack(side="right", fill="y")
 
+        translation_body = ttk.Frame(translation)
+        translation_body.pack(fill="both", expand=True)
+        self.translation_text = tk.Text(
+            translation_body, wrap="word", state="disabled", bg="#1e1f22",
+            fg="#dbdee1", insertbackground="#dbdee1", selectbackground="#5865f2",
+            selectforeground="#ffffff", relief="flat", bd=0, padx=10, pady=10,
+            font=("Segoe UI", 10),
+        )
+        translation_scroll = ttk.Scrollbar(
+            translation_body, orient="vertical", command=self.translation_text.yview
+        )
+        self.translation_text.configure(yscrollcommand=translation_scroll.set)
+        self.translation_text.pack(side="left", fill="both", expand=True)
+        translation_scroll.pack(side="right", fill="y")
+        translation_buttons = ttk.Frame(translation)
+        translation_buttons.pack(fill="x", pady=(7, 0))
+        self.continuous_translation_var = tk.BooleanVar(
+            value=bool(self.settings.get("translation_continuous", False))
+        )
+        ttk.Checkbutton(
+            translation_buttons, text="Continuous Translation",
+            variable=self.continuous_translation_var,
+            command=self._toggle_continuous_translation,
+        ).pack(side="left")
+        self.translate_chat_btn = ttk.Button(
+            translation_buttons, text="Translate Last 3",
+            command=self.translate_recent_chat, state="disabled",
+        )
+        self.translate_chat_btn.pack(side="right")
+        self.translation_status_var = tk.StringVar(value="Ready")
+        ttk.Label(translation, textvariable=self.translation_status_var).pack(
+            fill="x", pady=(5, 0)
+        )
+
         # Lower workspace tabs: Draft, exact AI Context, and persistent Relationships.
         lower_tabs = ttk.Notebook(lower_workspace)
         lower_tabs.pack(fill="both", expand=True)
@@ -642,6 +669,7 @@ class NWNAIApp:
         adaptive_frame = ttk.Frame(lower_tabs, padding=7)
         history_frame = ttk.Frame(lower_tabs, padding=7)
         guardrail_frame = ttk.Frame(lower_tabs, padding=7)
+        language_frame = ttk.Frame(lower_tabs, padding=7)
         lower_tabs.add(draft_frame, text="AI Draft")
         lower_tabs.add(context_frame, text="AI Context")
         lower_tabs.add(relationship_frame, text="Relationships")
@@ -651,7 +679,9 @@ class NWNAIApp:
         lower_tabs.add(adaptive_frame, text="Adaptive")
         lower_tabs.add(history_frame, text="History")
         lower_tabs.add(guardrail_frame, text="Guardrails & Usage")
+        lower_tabs.add(language_frame, text="Language Settings")
         self._build_guardrails_usage_tab(guardrail_frame)
+        self._build_language_settings_tab(language_frame)
 
         candidate_bar = ttk.Frame(draft_frame)
         candidate_bar.pack(fill="x", pady=(0, 6))
@@ -678,9 +708,17 @@ class NWNAIApp:
         self.length_mode_combo.pack(side="left", padx=(7, 0))
         self.length_mode_combo.bind("<<ComboboxSelected>>", self._on_length_mode_changed)
 
+        draft_editors = tk.PanedWindow(
+            draft_frame, orient="vertical", sashwidth=6, bg="#1e1f22", bd=0
+        )
+        draft_editors.pack(fill="both", expand=True)
+        user_draft_frame = ttk.LabelFrame(draft_editors, text="Draft in your language", padding=4)
+        game_draft_frame = ttk.LabelFrame(draft_editors, text="Draft in game language", padding=4)
+        draft_editors.add(user_draft_frame, minsize=70, stretch="always")
+        draft_editors.add(game_draft_frame, minsize=70, stretch="always")
         self.ai_draft_text = tk.Text(
-            draft_frame,
-            height=8,
+            user_draft_frame,
+            height=5,
             wrap="word",
             undo=True,
             bg="#1e1f22",
@@ -695,6 +733,13 @@ class NWNAIApp:
             font=("Segoe UI", 10),
         )
         self.ai_draft_text.pack(fill="both", expand=True)
+        self.translated_draft_text = tk.Text(
+            game_draft_frame, height=5, wrap="word", undo=True, bg="#1e1f22",
+            fg="#dbdee1", insertbackground="#dbdee1", selectbackground="#5865f2",
+            selectforeground="#ffffff", relief="flat", bd=0, padx=8, pady=7,
+            font=("Segoe UI", 10),
+        )
+        self.translated_draft_text.pack(fill="both", expand=True)
 
         draft_buttons = ttk.Frame(draft_frame)
         draft_buttons.pack(fill="x", pady=(7, 0))
@@ -723,6 +768,11 @@ class NWNAIApp:
             style="Accent.TButton",
         )
         self.paste_draft_btn.pack(side="right")
+        self.translate_draft_btn = ttk.Button(
+            draft_buttons, text="Translate Draft →", command=self.translate_current_draft,
+            state="disabled",
+        )
+        self.translate_draft_btn.pack(side="right", padx=(6, 0))
 
         # Exact content used in the latest AI reply request. Read-only.
         ttk.Label(
@@ -1132,6 +1182,72 @@ class NWNAIApp:
             bottom, text="Clear Activity Display", command=self.clear_activity_display
         ).pack(side="right")
 
+    def _build_language_settings_tab(self, frame):
+        ttk.Label(
+            frame,
+            text="Incoming game chat is translated into your language. Replies are drafted in your language first, then translated into the game language for final editing.",
+            wraplength=760,
+        ).pack(anchor="w", pady=(0, 10))
+        languages = core.language_choices()
+        form = ttk.LabelFrame(frame, text="Languages", padding=8)
+        form.pack(fill="x")
+        self.user_language_var = tk.StringVar(value=self.settings.get("user_language", "English"))
+        self.game_language_var = tk.StringVar(value=self.settings.get("game_language", "English"))
+        self.translation_auto_detect_var = tk.BooleanVar(value=bool(self.settings.get("translation_auto_detect", True)))
+        ttk.Label(form, text="Your language:").grid(row=0, column=0, sticky="w", pady=3)
+        ttk.Combobox(form, textvariable=self.user_language_var, values=languages, state="readonly", width=28).grid(row=0, column=1, sticky="w", padx=8, pady=3)
+        ttk.Label(form, text="Game language:").grid(row=1, column=0, sticky="w", pady=3)
+        ttk.Combobox(form, textvariable=self.game_language_var, values=languages, state="readonly", width=28).grid(row=1, column=1, sticky="w", padx=8, pady=3)
+        ttk.Checkbutton(form, text="Automatically detect incoming message language", variable=self.translation_auto_detect_var).grid(row=2, column=0, columnspan=2, sticky="w", pady=(7, 0))
+        terms = ttk.LabelFrame(frame, text="Protected names and terms (one per line)", padding=8)
+        terms.pack(fill="both", expand=True, pady=(10, 0))
+        self.translation_terms_text = tk.Text(terms, height=8, wrap="word")
+        self.translation_terms_text.pack(fill="both", expand=True)
+        self.translation_terms_text.insert("1.0", self.settings.get("translation_protected_terms", ""))
+        ttk.Label(terms, text="Character, place, deity, faction, and setting names listed here are preserved exactly.", wraplength=700).pack(anchor="w", pady=(6, 0))
+        buttons = ttk.Frame(frame)
+        buttons.pack(fill="x", pady=(8, 0))
+        ttk.Button(buttons, text="Save Language Settings", command=self._save_language_settings, style="Accent.TButton").pack(side="right")
+
+    def _save_language_settings(self):
+        self.settings.update(
+            user_language=self.user_language_var.get() or "English",
+            game_language=self.game_language_var.get() or "English",
+            translation_auto_detect=bool(self.translation_auto_detect_var.get()),
+            translation_continuous=bool(self.continuous_translation_var.get()),
+            translation_protected_terms=self.translation_terms_text.get("1.0", "end-1c").strip(),
+        )
+        if self.bot:
+            self.bot.settings.update({key: self.settings[key] for key in (
+                "user_language", "game_language", "translation_auto_detect",
+                "translation_continuous", "translation_protected_terms",
+            )})
+        core.save_settings(self.settings)
+        self.translation_status_var.set("Language settings saved.")
+
+    def _toggle_continuous_translation(self):
+        self.settings["translation_continuous"] = bool(self.continuous_translation_var.get())
+        if self.bot:
+            self.bot.settings["translation_continuous"] = self.settings["translation_continuous"]
+            if self.settings["translation_continuous"]:
+                self.bot.action_queue.put(("translate_chat", "new"))
+        core.save_settings(self.settings)
+
+    def translate_recent_chat(self):
+        if self.bot:
+            self._save_language_settings()
+            self.bot.action_queue.put(("translate_chat", "recent"))
+
+    def translate_current_draft(self):
+        if not self.bot:
+            return
+        text = self.ai_draft_text.get("1.0", "end").strip()
+        if not text:
+            self._append_log("[TRANSLATION] The user-language draft is empty.")
+            return
+        self._save_language_settings()
+        self.bot.action_queue.put(("translate_draft", text))
+
     def _build_guardrails_usage_tab(self, frame):
         pages = ttk.Notebook(frame)
         pages.pack(fill="both", expand=True)
@@ -1227,7 +1343,8 @@ class NWNAIApp:
             "Candidates": "candidates",
             "Summaries": "summary",
             "AFK": "afk",
-            "Translations": "translation",
+            "Incoming translations": "translation_incoming",
+            "Outgoing translations": "translation_outgoing",
             "Connection tests": "connection_test",
         }
         selector = ttk.Frame(frame)
@@ -1614,10 +1731,6 @@ class NWNAIApp:
             self.guidance_text.insert("1.0", current_guide)
             self.guidance_text.edit_modified(False)
             self.guide_status_var.set("Guidance active until cleared.")
-        response_seed = core.read_shared_response_seed()
-        if response_seed:
-            self.response_seed_text.insert("1.0", response_seed)
-            self.response_seed_text.edit_modified(False)
         self._append_log("UI ready. Click Start to begin watching the NWN log.")
 
     def _refresh_character_profiles(self, initial=False, load_ai_settings=True):
@@ -2754,24 +2867,6 @@ class NWNAIApp:
         self.guide_status_var.set("No guidance active.")
         self._append_log("[GUIDE] Persistent guidance cleared.")
 
-    def _on_response_seed_modified(self, event=None):
-        if not self.response_seed_text.edit_modified():
-            return
-        value = self.response_seed_text.get("1.0", "end").strip()
-        core.write_shared_response_seed(value)
-        self.response_seed_text.edit_modified(False)
-
-    def save_response_seed(self):
-        value = self.response_seed_text.get("1.0", "end").strip()
-        core.write_shared_response_seed(value)
-        self.response_seed_text.edit_modified(False)
-
-    def clear_response_seed(self):
-        if core.clear_shared_response_seed():
-            self.response_seed_text.delete("1.0", "end")
-            self.response_seed_text.edit_modified(False)
-            self._append_log("[SEED] Response seed cleared.")
-
     def _on_length_mode_changed(self, event=None):
         mode = self.length_mode_var.get() or "Auto"
         self.settings["response_length_mode"] = mode
@@ -3118,6 +3213,8 @@ class NWNAIApp:
             self.longer_btn.configure(state="normal")
             self.paste_draft_btn.configure(state="normal")
             self.clear_draft_btn.configure(state="normal")
+            self.translate_draft_btn.configure(state="normal")
+            self.translate_chat_btn.configure(state="normal")
             self.save_relationship_btn.configure(state="normal")
             self.ignore_context_btn.configure(state="normal")
             self.pin_context_btn.configure(state="normal")
@@ -3140,6 +3237,8 @@ class NWNAIApp:
             self.longer_btn.configure(state="disabled")
             self.paste_draft_btn.configure(state="disabled")
             self.clear_draft_btn.configure(state="disabled")
+            self.translate_draft_btn.configure(state="disabled")
+            self.translate_chat_btn.configure(state="disabled")
             self.save_relationship_btn.configure(state="disabled")
             self.ignore_context_btn.configure(state="disabled")
             self.pin_context_btn.configure(state="disabled")
@@ -3177,6 +3276,7 @@ class NWNAIApp:
             self.ai_draft_text.insert("1.0", text)
             self.bot._publish_draft(text)
             self.last_seen_draft_version = self.bot.last_draft_version
+            self.bot.action_queue.put(("translate_draft", text))
 
     def _refresh_history_files(self):
         if not self.bot:
@@ -3731,7 +3831,6 @@ class NWNAIApp:
     def _request_draft_variant(self, variant):
         if self.bot:
             self.set_guidance_if_changed()
-            self.save_response_seed()
             self.bot.action_queue.put(("draft_variant", variant))
 
     def regenerate_draft(self):
@@ -3746,7 +3845,16 @@ class NWNAIApp:
     def paste_current_draft(self):
         if not self.bot:
             return
-        text = self.ai_draft_text.get("1.0", "end").strip()
+        user_text = self.ai_draft_text.get("1.0", "end").strip()
+        game_text = self.translated_draft_text.get("1.0", "end").strip()
+        languages_differ = self.settings.get("user_language", "English") != self.settings.get("game_language", "English")
+        if languages_differ and (
+            user_text != self.bot.translated_draft_source
+            or self.bot.translated_draft_language != self.settings.get("game_language", "English")
+        ):
+            self._append_log("[TRANSLATION] The user-language draft changed. Translate it again before pasting.")
+            return
+        text = game_text if languages_differ else (game_text or user_text)
         if not text:
             self._append_log("[DRAFT] Draft box is empty.")
             return
@@ -3756,8 +3864,12 @@ class NWNAIApp:
 
     def clear_ai_draft(self):
         self.ai_draft_text.delete("1.0", "end")
+        self.translated_draft_text.delete("1.0", "end")
         if self.bot:
             self.bot.last_draft = ""
+            self.bot.translated_draft = ""
+            self.bot.translated_draft_source = ""
+            self.bot.translated_draft_language = ""
             self.bot.last_draft_version += 1
             self.last_seen_draft_version = self.bot.last_draft_version
         self._append_log("[DRAFT] Draft box cleared.")
@@ -3765,15 +3877,13 @@ class NWNAIApp:
     def generate_draft(self):
         if self.bot:
             self.set_guidance_if_changed()
-            self.save_response_seed()
             self.bot.action_queue.put(("suggest", "ui"))
 
     def generate_to_nwn(self):
         if self.bot:
             self.set_guidance_if_changed()
-            self.save_response_seed()
-            self._append_log("[F9] Generating. When the reply is ready, click NWN during the 2-second countdown.")
-            self.bot.action_queue.put(("generate_and_send", "manual"))
+            self._append_log("[F9] Generating a user-language reply, then translating it for review.")
+            self.bot.action_queue.put(("generate_translation_draft", "manual"))
 
     def clear_context(self):
         if self.bot:
@@ -3841,6 +3951,26 @@ class NWNAIApp:
                     if self.bot.last_draft:
                         self.ai_draft_text.delete("1.0", "end")
                         self.ai_draft_text.insert("1.0", self.bot.last_draft)
+                        if self.bot.translated_draft_source != self.bot.last_draft:
+                            self.bot.action_queue.put(("translate_draft", self.bot.last_draft))
+
+                if self.bot.translated_draft_version != self.last_seen_translated_draft_version:
+                    self.last_seen_translated_draft_version = self.bot.translated_draft_version
+                    self.translated_draft_text.delete("1.0", "end")
+                    self.translated_draft_text.insert("1.0", self.bot.translated_draft)
+
+                if self.bot.translated_chat_version != self.last_seen_translation_version:
+                    self.last_seen_translation_version = self.bot.translated_chat_version
+                    lines = []
+                    for item in self.bot.translated_chat:
+                        language = f" ({item['language']})" if item.get("language") else ""
+                        lines.append(f"[{item['channel']}] {item['speaker']}{language}: {item['text']}")
+                    self.translation_text.configure(state="normal")
+                    self.translation_text.delete("1.0", "end")
+                    self.translation_text.insert("1.0", "\n".join(lines))
+                    self.translation_text.see("end")
+                    self.translation_text.configure(state="disabled")
+                self.translation_status_var.set(self.bot.translation_status)
 
                 if self.bot.candidate_version != self.last_seen_candidate_version:
                     self.last_seen_candidate_version = self.bot.candidate_version

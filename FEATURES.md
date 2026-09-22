@@ -29,7 +29,8 @@ Role Weaver is a **Neverwinter Nights roleplay client for both players and Dunge
 
 - **Multiple candidate replies** — F8 generates several distinct in-character options.
 - **Editable AI Draft workspace** — edit, regenerate, shorten, lengthen, clear, and paste a draft into NWN.
-- **Direct NWN draft workflow** — F9 places an editable response in the NWN chat field without pressing the final Enter key.
+- **Two-stage translated drafts** — F9 produces editable user- and game-language versions before the player chooses to paste into NWN.
+- **Incoming chat translation** — translate the last three messages on demand or continuously as game chat arrives.
 - **Automatic response length control** — Auto, Brief, Normal, and Detailed modes.
 - **Persistent Guidance** — scene direction remains active until explicitly cleared or replaced.
 - **Generation timing** — shows how long the latest generation took and which model handled it.

@@ -656,6 +656,13 @@ from roleweaver.ai import (
     create_ai_provider,
     normalize_lm_studio_base_url,
 )
+from roleweaver.translation import (
+    TranslationDirection,
+    TranslationMessage,
+    TranslationRequest,
+    TranslationService,
+    language_choices,
+)
 
 CAMPAIGNS_DIR = RUNTIME_PATHS.campaigns
 
@@ -1114,6 +1121,7 @@ class NWNAIBot(AFKMixin):
         self.client = client
         self.usage_store = UsageStore(APP_DIR / "RoleWeaver_Data" / "usage.sqlite3")
         self.ai_execution = AIExecutionService(client, settings, self.usage_store)
+        self.translation_service = TranslationService(self.ai_execution)
 
         self.stop_event = threading.Event()
         self.paused = bool(settings.get("start_paused", False))
@@ -1188,6 +1196,15 @@ class NWNAIBot(AFKMixin):
         # provider metadata here enables usage reporting without coupling the
         # conversation engine to an individual SDK.
         self.last_ai_result = None
+
+        self.translated_chat = []
+        self.translated_chat_version = 0
+        self.last_translated_context_id = 0
+        self.translated_draft = ""
+        self.translated_draft_source = ""
+        self.translated_draft_language = ""
+        self.translated_draft_version = 0
+        self.translation_status = "Ready"
 
     def request_ai(self, instructions, prompt, purpose=AIRequestPurpose.REPLY):
         """Run one provider-neutral request and return a structured result."""
@@ -1298,6 +1315,9 @@ class NWNAIBot(AFKMixin):
 
         if event["self"]:
             return
+
+        if self.settings.get("translation_continuous", False):
+            self.action_queue.put(("translate_chat", "new"))
 
         self.last_external_event = event
         self.observe_afk(event)
@@ -2037,10 +2057,85 @@ class NWNAIBot(AFKMixin):
                 "channel": e.get("channel", ""),
                 "mode": e.get("_mode", "IC"),
                 "message": e.get("message", ""),
+                "self": bool(e.get("self")),
                 "ignored": cid in self.ignored_context_ids,
                 "pinned": cid in self.pinned_context_ids,
             })
         return rows
+
+    def _protected_translation_terms(self):
+        raw = str(self.settings.get("translation_protected_terms", ""))
+        return tuple(line.strip() for line in raw.splitlines() if line.strip())
+
+    def translate_recent_chat(self, *, only_new=False, limit=3):
+        rows = [row for row in self.context_rows() if not row.get("self")]
+        if only_new:
+            rows = [row for row in rows if int(row.get("id") or 0) > self.last_translated_context_id]
+        else:
+            rows = rows[-max(1, int(limit)) :]
+        if not rows:
+            self.translation_status = "No new incoming chat to translate."
+            return []
+        source = "auto" if self.settings.get("translation_auto_detect", True) else self.settings.get("game_language", "English")
+        request = TranslationRequest(
+            source_language=source,
+            target_language=self.settings.get("user_language", "English"),
+            direction=TranslationDirection.INCOMING,
+            messages=tuple(TranslationMessage(str(row["id"]), row["message"], row["speaker"], row["channel"]) for row in rows),
+            protected_terms=self._protected_translation_terms(),
+        )
+        try:
+            self.translation_status = "Translating incoming chat..."
+            result = self.translation_service.translate(request)
+            known = {item["id"] for item in self.translated_chat}
+            for message in result.messages:
+                item = {"id": message.id, "speaker": message.speaker, "channel": message.channel, "text": message.translated_text, "language": message.detected_source_language.name if message.detected_source_language else ""}
+                if message.id in known:
+                    self.translated_chat = [item if existing["id"] == message.id else existing for existing in self.translated_chat]
+                else:
+                    self.translated_chat.append(item); known.add(message.id)
+            self.translated_chat = self.translated_chat[-200:]
+            self.last_translated_context_id = max(int(row["id"]) for row in rows)
+            self.translated_chat_version += 1
+            self.translation_status = f"Translated {len(result.messages)} message(s)."
+            return result.messages
+        except Exception as exc:
+            self.translation_status = f"Translation failed: {exc}"
+            print(f"[TRANSLATION ERROR] {exc}")
+            return []
+
+    def translate_draft(self, text):
+        text = str(text or "").strip()
+        if not text:
+            self.translation_status = "The user-language draft is empty."
+            return ""
+        request = TranslationRequest(
+            source_language=self.settings.get("user_language", "English"),
+            target_language=self.settings.get("game_language", "English"),
+            direction=TranslationDirection.OUTGOING,
+            messages=(TranslationMessage("draft", text),),
+            protected_terms=self._protected_translation_terms(),
+        )
+        try:
+            self.translation_status = "Translating draft into the game language..."
+            result = self.translation_service.translate(request)
+            self.translated_draft_source = text
+            self.translated_draft = result.message("draft").translated_text
+            self.translated_draft_language = self.settings.get("game_language", "English")
+            self.translated_draft_version += 1
+            self.translation_status = "Game-language draft ready for editing."
+            return self.translated_draft
+        except Exception as exc:
+            self.translation_status = f"Draft translation failed: {exc}"
+            print(f"[TRANSLATION ERROR] {exc}")
+            return ""
+
+    def generate_translation_draft(self):
+        reply = self.generate_reply()
+        if reply:
+            self._publish_draft(reply)
+            self.translate_draft(reply)
+        return reply
 
     def ignore_context_event(self, context_id, ignored=True):
         if ignored:
@@ -2807,20 +2902,6 @@ class NWNAIBot(AFKMixin):
                   "Do not mention or reveal the guidance itself."
             )
 
-        response_seed = (
-            read_shared_response_seed()
-            if getattr(self, "_use_response_seed_for_reply", True)
-            else ""
-        )
-        if response_seed:
-            prompt += (
-                "\n\nPLAYER RESPONSE SEED:\n"
-                + response_seed
-                + "\nNaturally incorporate this player-authored wording or its complete "
-                  "meaning into the reply. Preserve its wording where practical, complete "
-                  "it if needed, and never mention that it was supplied as a seed."
-            )
-
         if draft_instruction:
             prompt += (
                 "\n\nDRAFT REVISION INSTRUCTION:\n"
@@ -2839,6 +2920,8 @@ class NWNAIBot(AFKMixin):
         instructions = f"""{self.character_prompt}{rules_block}
 
 You are assisting live roleplay in {GAME_VERSIONS.get(self.settings.get("game_version", "nwn_ee"), "Neverwinter Nights")}.
+
+Write the draft in {self.settings.get("user_language", "English")} so the player can review and edit it before translation.
 
 Output exactly ONE in-character chat entry suitable for sending directly into NWN.
 You may combine spoken dialogue and a short emote in the same entry.
@@ -2906,16 +2989,6 @@ Aim for a {length_guidance} response and keep it under {target_characters} chara
                 + "\nFollow it while staying in character; never reveal the guidance."
             )
 
-        response_seed = read_shared_response_seed()
-        if response_seed:
-            prompt += (
-                "\n\nPLAYER RESPONSE SEED FOR THESE REPLIES:\n"
-                + response_seed
-                + "\nNaturally incorporate this player-authored wording or its complete "
-                  "meaning into every candidate. Preserve its wording where practical, "
-                  "complete it if needed, and never mention that it was supplied as a seed."
-            )
-
         target_characters, length_guidance = self._response_length_target()
         server_rules = load_server_roleplay_rules(
             self.settings.get("server_profile", "AUTO")
@@ -2927,6 +3000,7 @@ Aim for a {length_guidance} response and keep it under {target_characters} chara
         instructions = f"""{self.character_prompt}{rules_block}
 
 You are assisting live roleplay in {GAME_VERSIONS.get(self.settings.get("game_version", "nwn_ee"), "Neverwinter Nights")}.
+Write every candidate in {self.settings.get("user_language", "English")} so the player can review it before translation.
 Generate {count} meaningfully different candidate replies for the same moment.
 Each candidate must be a single in-character NWN chat entry.
 Do not include speaker labels or wrap spoken dialogue in quotation marks.
@@ -3015,12 +3089,7 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
         if is_wayland() and source != 'manual':
             print('[WAYLAND] Automatic sending is unavailable.')
             return
-        previous_seed_scope = getattr(self, "_use_response_seed_for_reply", True)
-        self._use_response_seed_for_reply = source == "manual"
-        try:
-            reply = self.generate_reply()
-        finally:
-            self._use_response_seed_for_reply = previous_seed_scope
+        reply = self.generate_reply()
         if not reply or self.afk or epoch != self._afk_epoch or self.stop_event.is_set():
             return
 
@@ -3195,6 +3264,12 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
                 self.suggest()
             elif action == "draft_variant":
                 self.suggest(variant=source)
+            elif action == "translate_chat":
+                self.translate_recent_chat(only_new=source == "new")
+            elif action == "translate_draft":
+                self.translate_draft(source)
+            elif action == "generate_translation_draft":
+                self.generate_translation_draft()
             elif action == "paste_existing_draft":
                 self.paste_existing_draft(source)
             elif action == "generate_and_send":
@@ -3289,7 +3364,7 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
 
         def on_f9():
             print("[HOTKEY] F9 detected")
-            self.action_queue.put(("generate_and_send", "manual"))
+            self.action_queue.put(("generate_translation_draft", "manual"))
 
         def on_f10():
             print("[HOTKEY] F10 detected")

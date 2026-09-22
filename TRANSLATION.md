@@ -69,6 +69,14 @@ persist source text or translations. Its exceptions omit provider output and
 source text, and the existing usage database records only content-free request
 metadata.
 
-The current layer provides service contracts only. The incoming Translation
-window, continuous/manual batching, Language Settings page and dual outgoing
-draft editors will be connected in subsequent stages.
+## Desktop workflow
+
+The Windows and Linux clients now provide a resizable Translation window beside
+Activity. **Translate Last 3** translates the newest incoming game-chat lines;
+**Continuous Translation** processes new incoming lines as they arrive.
+
+The **Language Settings** page selects the user's language, game language,
+incoming auto-detection, and protected terminology. F8 candidates and F9 replies
+are drafted in the user's language. A second editable editor contains the game-
+language translation. The player explicitly translates again after editing the
+first draft, then reviews the game-language draft before pasting it into NWN.

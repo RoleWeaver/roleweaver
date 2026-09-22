@@ -55,16 +55,21 @@ class ClientFixTests(unittest.TestCase):
 
     def test_only_requested_fields_are_registered(self):
         registrations = [n for n in ast.walk(ast.parse(self.source)) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "track"]
-        self.assertEqual(len(registrations), 4)
+        self.assertEqual(len(registrations), 5)
         self.assertNotIn("edit_recovery.offer", self.source)
         self.assertIn('self.edit_recovery.track(self.guidance_text, "Guidance")', self.source)
         self.assertIn('self.edit_recovery.track(self.ai_draft_text, "AI Draft")', self.source)
+        self.assertIn('self.edit_recovery.track(self.translated_draft_text, "Game-language Draft")', self.source)
 
-    def test_response_seed_is_persistent_and_added_to_f8_and_f9_prompts(self):
-        seed = "*Elara glances toward the door.* I noticed you arrived late."
-        self.assertTrue(self.core.write_shared_response_seed(seed))
-        self.assertEqual(self.core.read_shared_response_seed(), seed)
+    def test_editable_translation_drafts_replace_response_seed_workflow(self):
+        self.assertNotIn("Response Seed (optional)", self.source)
+        self.assertIn('text="Draft in your language"', self.source)
+        self.assertIn('text="Draft in game language"', self.source)
+        self.assertIn('text="Language Settings"', self.source)
+
+    def test_reply_generation_requests_the_configured_user_language(self):
         bot = self.fixture.bot()
+        bot.settings["user_language"] = "French"
         event = {
             "speaker": "Alice",
             "channel": "Talk",
@@ -83,41 +88,26 @@ class ClientFixTests(unittest.TestCase):
         )
 
         self.assertEqual(bot.generate_reply(), "I noticed you arrived late.")
-        reply_prompt = bot.request_ai.call_args.args[1]
-        self.assertIn("PLAYER RESPONSE SEED", reply_prompt)
-        self.assertIn(seed, reply_prompt)
+        instructions = bot.request_ai.call_args.args[0]
+        self.assertIn("Write the draft in French", instructions)
 
-        bot.request_ai.reset_mock()
-        bot.request_ai.return_value = SimpleNamespace(
-            text='{"candidates":["First candidate","Second candidate"]}',
-            duration_seconds=0.1,
-            model="test-model",
-        )
-        self.assertEqual(
-            bot.generate_candidates(), ["First candidate", "Second candidate"]
-        )
-        candidate_prompt = bot.request_ai.call_args.args[1]
-        self.assertIn("PLAYER RESPONSE SEED FOR THESE REPLIES", candidate_prompt)
-        self.assertIn(seed, candidate_prompt)
-
-        self.assertTrue(self.core.clear_shared_response_seed())
-        self.assertEqual(self.core.read_shared_response_seed(), "")
-
-    def test_response_seed_is_disabled_for_automatic_replies(self):
+    def test_translation_workflow_filters_self_chat_and_publishes_editable_drafts(self):
         bot = self.fixture.bot()
-        bot.auto_reply = True
-        seed_scopes = []
-        bot.generate_reply = Mock(
-            side_effect=lambda: seed_scopes.append(
-                bot._use_response_seed_for_reply
-            )
-        )
-
-        bot.generate_and_send(source="auto")
-
-        bot.generate_reply.assert_called_once_with()
-        self.assertEqual(seed_scopes, [False])
-        self.assertTrue(bot._use_response_seed_for_reply)
+        bot.settings.update(user_language="English", game_language="German")
+        bot.context.extend([
+            {"_context_id": 1, "speaker": "Hero", "channel": "Talk", "message": "Mine", "self": True},
+            {"_context_id": 2, "speaker": "Alice", "channel": "Talk", "message": "Hallo", "self": False},
+        ])
+        incoming = SimpleNamespace(id="2", speaker="Alice", channel="Talk", translated_text="Hello", detected_source_language=SimpleNamespace(name="German"))
+        outgoing = SimpleNamespace(translated_text="Guten Abend")
+        bot.translation_service = Mock()
+        bot.translation_service.translate.side_effect = [SimpleNamespace(messages=(incoming,)), SimpleNamespace(message=Mock(return_value=outgoing))]
+        bot.translate_recent_chat(); bot.translate_draft("Good evening")
+        first_request = bot.translation_service.translate.call_args_list[0].args[0]
+        self.assertEqual([message.id for message in first_request.messages], ["2"])
+        self.assertEqual(bot.translated_chat[0]["text"], "Hello")
+        self.assertEqual(bot.translated_draft, "Guten Abend")
+        self.assertEqual(bot.translated_draft_source, "Good evening")
 
     def test_clear_all_removes_recovery_only_and_cancels_pending(self):
         recovery = DraftRecovery(Mock(settings={}), self.root)

@@ -95,6 +95,11 @@ class RoleWeaverSettings(TypedDict, total=False):
     guardrail_retry_output_once: bool
     usage_input_cost_per_million: float | None
     usage_output_cost_per_million: float | None
+    user_language: str
+    game_language: str
+    translation_auto_detect: bool
+    translation_continuous: bool
+    translation_protected_terms: str
 
 
 def default_settings(default_log_path: str, *, keyboard_method: str) -> RoleWeaverSettings:
@@ -154,6 +159,11 @@ def default_settings(default_log_path: str, *, keyboard_method: str) -> RoleWeav
         "guardrail_retry_output_once": True,
         "usage_input_cost_per_million": None,
         "usage_output_cost_per_million": None,
+        "user_language": "English",
+        "game_language": "English",
+        "translation_auto_detect": True,
+        "translation_continuous": False,
+        "translation_protected_terms": "",
     }
 
 

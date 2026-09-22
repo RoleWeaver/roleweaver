@@ -78,13 +78,12 @@ For more detail, including LM Studio, see **AI_PROVIDER_SETUP.md**.
 
 ### Players
 - Character-consistent dialogue and emotes from recent NWN conversation.
-- F8 multiple candidate replies and F9 editable, unsent paste into NWN.
+- F8 multiple candidate replies and F9 single-reply generation with editable user- and game-language drafts.
 - Persistent character memory, relationships, emotional continuity, knowledge and story threads.
 - Learned voice based on IC dialogue actually sent through NWN.
 - Correction learning and player-approved Character Development.
 - Guidance for steering a scene without rewriting the character profile.
-- An optional Response Seed for supplying dialogue or wording that F8/F9 should
-  naturally incorporate into generated replies.
+- Manual or continuous incoming chat translation with protected setting names.
 - Visible AI Context so you can inspect what roleplay material was supplied.
 
 ### Dungeon Masters
@@ -100,19 +99,14 @@ For more detail, including LM Studio, see **AI_PROVIDER_SETUP.md**.
 | Control | Purpose |
 | --- | --- |
 | **F8** | Generate multiple candidate drafts in Role Weaver |
-| **F9** | Generate a fresh reply and paste it into NWN without sending |
+| **F9** | Generate one reply and translate it into the game language for review |
 | **F10** | Toggle AFK (away from keyboard) |
 | **F6** | Pause/resume listening |
 | **F11** | Clear current conversation context |
 | **F12** | Stop Role Weaver |
 
-F9 deliberately leaves the final Enter to the player/DM so the reply can be reviewed and edited in NWN.
-
-Enter character wording, dialogue or an opening emote in **Response Seed** below
-the Guidance panel. F8 incorporates it into every candidate and F9 incorporates
-it into the generated NWN draft. The seed remains available for regeneration
-until **Clear Seed** is pressed. Leave it empty for the original chat-only
-generation behavior.
+Both draft stages remain editable. Use **Translate Draft** after editing the
+user-language version, review the game-language result, then paste it into NWN.
 
 ## Automatic world and log detection
 
