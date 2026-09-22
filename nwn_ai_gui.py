@@ -100,20 +100,22 @@ class QueueWriter:
     """Thread-safe stdout/stderr bridge into the Tk UI."""
     def __init__(self, output_queue):
         self.output_queue = output_queue
-        self.buffer = ""
+        self._thread_state = threading.local()
 
     def write(self, text):
         if not text:
             return
-        self.buffer += str(text)
-        while "\n" in self.buffer:
-            line, self.buffer = self.buffer.split("\n", 1)
+        buffer = getattr(self._thread_state, "buffer", "") + str(text)
+        while "\n" in buffer:
+            line, buffer = buffer.split("\n", 1)
             self.output_queue.put(line)
+        self._thread_state.buffer = buffer
 
     def flush(self):
-        if self.buffer:
-            self.output_queue.put(self.buffer)
-            self.buffer = ""
+        buffer = getattr(self._thread_state, "buffer", "")
+        if buffer:
+            self.output_queue.put(buffer)
+            self._thread_state.buffer = ""
 
 
 class NWNAIApp:
@@ -622,6 +624,21 @@ class NWNAIApp:
         self.log_text.pack(side="left", fill="both", expand=True)
         scroll.pack(side="right", fill="y")
 
+        translation_buttons = ttk.Frame(translation)
+        translation_buttons.pack(fill="x", pady=(0, 7))
+        self.continuous_translation_var = tk.BooleanVar(
+            value=bool(self.settings.get("translation_continuous", False))
+        )
+        ttk.Checkbutton(
+            translation_buttons, text="Continuous Translation",
+            variable=self.continuous_translation_var,
+            command=self._toggle_continuous_translation,
+        ).pack(side="left")
+        self.translate_chat_btn = ttk.Button(
+            translation_buttons, text="Translate Last 3",
+            command=self.translate_recent_chat, state="disabled",
+        )
+        self.translate_chat_btn.pack(side="right")
         translation_body = ttk.Frame(translation)
         translation_body.pack(fill="both", expand=True)
         self.translation_text = tk.Text(
@@ -636,21 +653,6 @@ class NWNAIApp:
         self.translation_text.configure(yscrollcommand=translation_scroll.set)
         self.translation_text.pack(side="left", fill="both", expand=True)
         translation_scroll.pack(side="right", fill="y")
-        translation_buttons = ttk.Frame(translation)
-        translation_buttons.pack(fill="x", pady=(7, 0))
-        self.continuous_translation_var = tk.BooleanVar(
-            value=bool(self.settings.get("translation_continuous", False))
-        )
-        ttk.Checkbutton(
-            translation_buttons, text="Continuous Translation",
-            variable=self.continuous_translation_var,
-            command=self._toggle_continuous_translation,
-        ).pack(side="left")
-        self.translate_chat_btn = ttk.Button(
-            translation_buttons, text="Translate Last 3",
-            command=self.translate_recent_chat, state="disabled",
-        )
-        self.translate_chat_btn.pack(side="right")
         self.translation_status_var = tk.StringVar(value="Ready")
         ttk.Label(translation, textvariable=self.translation_status_var).pack(
             fill="x", pady=(5, 0)

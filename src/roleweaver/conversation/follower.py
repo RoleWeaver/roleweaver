@@ -18,6 +18,7 @@ class LogFollower:
         self.file = None
         self.identity = None
         self.position = 0
+        self.pending_line = ""
 
     @staticmethod
     def _identity_from_stat(stat_result: os.stat_result) -> tuple[int | None, int | None]:
@@ -32,6 +33,7 @@ class LogFollower:
         self.file = None
         self.identity = None
         self.position = 0
+        self.pending_line = ""
 
     def _open_at_end(self) -> None:
         self.file = self.path.open("r", encoding="utf-8", errors="replace")
@@ -61,10 +63,14 @@ class LogFollower:
                     else:
                         self._open_at_start()
 
-                line = self.file.readline()
-                if line:
+                fragment = self.file.readline()
+                if fragment:
                     self.position = self.file.tell()
-                    yield line.rstrip("\r\n")
+                    self.pending_line += fragment
+                    if self.pending_line.endswith("\n"):
+                        line = self.pending_line.rstrip("\r\n")
+                        self.pending_line = ""
+                        yield line
                     continue
 
                 try:
