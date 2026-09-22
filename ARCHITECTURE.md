@@ -10,6 +10,8 @@ remain usable and existing character, campaign and memory data stay compatible.
 | --- | --- |
 | `src/roleweaver/` | Shared, platform-neutral application code |
 | `src/roleweaver/ai/` | Provider-independent AI contracts and built-in providers |
+| `src/roleweaver/conversation/` | Chat event contract, NWN log parsing and resilient log following |
+| `src/roleweaver/games.py` | Game editions, log discovery and NWN2 normalization |
 | `nwn_ai_gui.py` | Windows Tkinter entry point and compatibility application shell |
 | `nwn_ai_bot.py` | Windows conversation engine and compatibility exports |
 | `linux/` | Linux entry points and platform input adapter |
@@ -52,11 +54,25 @@ The supported purposes are reply, candidate generation, memory summary, AFK,
 translation and connection test. Translation is included in the contract now so
 it can use the same monitoring and guardrail path later.
 
+## Conversation boundary
+
+Game logs are normalized through `roleweaver.conversation` before they reach
+memory, prompting or the UI. `parse_chat_line()` returns a `ChatEvent` mapping
+with stable speaker, channel, message, self-message and server-profile fields.
+NWN2 Tells may also contain a `recipient`. This dictionary-shaped contract
+preserves compatibility while giving extensions a documented type to target.
+
+`LogFollower` owns rotation and truncation handling. It is platform-neutral;
+operating-system adapters are responsible only for locating logs and delivering
+keyboard/clipboard input.
+
 ## Compatibility layer
 
 The root and Linux scripts remain runnable during migration. They re-export the
-shared provider names that older code imports from `nwn_ai_bot.py`, while the
-implementations live only in `roleweaver.ai`.
+shared provider and conversation names that older code imports from
+`nwn_ai_bot.py`. The root and Linux `roleweaver_games.py` files redirect legacy
+imports to `roleweaver.games`, so monkey-patching and existing extensions still
+operate on the authoritative module.
 
 Future extractions should be small and behavior-preserving. Move shared logic,
 keep a compatibility import where necessary, add focused tests, then remove the

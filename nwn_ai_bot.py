@@ -5,7 +5,15 @@ _bootstrap_src = _bootstrap_os.path.join(_bootstrap_os.path.dirname(__file__), "
 if _bootstrap_os.path.isdir(_bootstrap_src) and _bootstrap_src not in _bootstrap_sys.path:
     _bootstrap_sys.path.insert(0, _bootstrap_src)
 
-from roleweaver_games import GAME_VERSIONS, switch_game, default_game_log, discover_game_logs, parse_nwn2
+from roleweaver.conversation import (
+    GENERIC_AREA_PATTERNS,
+    LogFollower,
+    clean_nwn_text,
+    detect_log_format,
+    parse_chat_line,
+    strip_chat_window_prefix as _strip_chat_window_prefix,
+)
+from roleweaver.games import GAME_VERSIONS, default_game_log, discover_game_logs, switch_game
 from roleweaver_afk import AFKMixin
 import copy
 from roleweaver_pending import SummaryJournal
@@ -36,26 +44,6 @@ from openai import OpenAI
 APP_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
 SETTINGS_PATH = APP_DIR / "settings.json"
 CHARACTER_PROMPT_PATH = APP_DIR / "character_prompt.txt"
-
-COLOR_TAG_RE = re.compile(r"</?c[^>]*>", re.IGNORECASE)
-CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
-
-# Matches examples such as:
-# [speaker-id] Example Character: [Talk] <c   >"Hello."</c>
-# [rHfBdZh] <c...>Bookish Rascal</c>: [Talk] <c...>"Hello."</c>
-# Scrivener of the Vaunted Word: [Talk] "We live and learn."
-STRUCTURED_CHAT_RE = re.compile(
-    r"^(?:\[(?P<speaker_id>[^\]]+)\]\s+)?"
-    r"(?P<speaker>.*?):\s*"
-    r"\[(?P<channel>Talk|Whisper|Party|Tell|Shout|DM)\]\s*"
-    r"(?P<message>.*)$",
-    re.IGNORECASE,
-)
-
-GENERIC_AREA_PATTERNS = [
-    re.compile(r"\*Now Entering (?P<area>.+?)\*\s*$", re.IGNORECASE),
-    re.compile(r"<<\s*You have entered the area:\s*(?P<area>.+?)\.?\s*>>", re.IGNORECASE),
-]
 
 DEFAULT_NWN_LOG_DIR = Path.home() / "Documents" / "Neverwinter Nights" / "logs"
 DEFAULT_NWN_LOG_PATH = str(DEFAULT_NWN_LOG_DIR / "nwclientLog1.txt")
@@ -177,15 +165,6 @@ def _read_log_tail(path, max_bytes=300000):
         return data.decode("utf-8", errors="replace")
     except Exception:
         return ""
-
-
-def _strip_chat_window_prefix(line):
-    return re.sub(
-        r"^\[CHAT WINDOW TEXT\]\s*(?:\[[^\]]+\]\s*)?",
-        "",
-        str(line or "").strip(),
-        flags=re.IGNORECASE,
-    )
 
 
 def detect_world_from_log(log_path):
@@ -353,281 +332,6 @@ def load_server_roleplay_rules(server_profile="AUTO"):
         return path.read_text(encoding="utf-8", errors="replace").strip()
     except Exception:
         return ""
-
-
-def clean_nwn_text(text):
-    text = COLOR_TAG_RE.sub("", text)
-    text = CONTROL_RE.sub("", text)
-    return text.strip()
-
-
-ALT_CHANNEL_FIRST_RE = re.compile(
-    r"^\[(?P<channel>Talk|Whisper|Party|Tell|Shout|DM)\]\s*"
-    r"(?P<speaker>[^:]{1,120}):\s*(?P<message>.*)$",
-    re.IGNORECASE,
-)
-
-ALT_SPEAKER_CHANNEL_RE = re.compile(
-    r"^(?P<speaker>[^\[]+?)\s*\[(?P<channel>Talk|Whisper|Party|Tell|Shout|DM)\]\s*:\s*"
-    r"(?P<message>.*)$",
-    re.IGNORECASE,
-)
-
-CHAT_WINDOW_CHANNEL_RE = re.compile(
-    r"^(?P<speaker>[^:]{1,120}):\s*"
-    r"\[(?P<channel>Talk|Whisper|Party|Tell|Shout|DM)\]\s*"
-    r"(?P<message>.*)$",
-    re.IGNORECASE,
-)
-
-CHAT_WINDOW_PLAIN_RE = re.compile(
-    r"^(?P<speaker>[^:]{1,100}):\s*(?P<message>.+)$",
-    re.IGNORECASE,
-)
-
-GENERIC_SYSTEM_SPEAKERS = {
-    "loading screen", "server", "area setting", "public message board",
-    "system", "combat log", "debug",
-}
-
-
-def _build_chat_event(speaker, message, channel, character_name, server_profile, speaker_id=""):
-    speaker = clean_nwn_text(speaker)
-    message = clean_nwn_text(message)
-    channel = str(channel or "Talk").title()
-    speaker_id = clean_nwn_text(speaker_id)
-    if not speaker or not message:
-        return None
-    if speaker.casefold() in GENERIC_SYSTEM_SPEAKERS or "message board" in speaker.casefold():
-        return None
-    if message.startswith("[") and message.endswith("]"):
-        return None
-    return {
-        "speaker_id": speaker_id,
-        "speaker": speaker,
-        "channel": channel,
-        "message": message,
-        "self": speaker.casefold() == character_name.casefold(),
-        "server_profile": server_profile,
-    }
-
-
-def _parse_standard_structured_chat(raw, character_name, server_profile):
-    """Parse the standard structured copy emitted by NWN:EE."""
-    m = STRUCTURED_CHAT_RE.match(raw)
-    if not m:
-        return None
-    return _build_chat_event(
-        m.group("speaker"), m.group("message"), m.group("channel"),
-        character_name, server_profile, m.group("speaker_id") or "",
-    )
-
-
-def _looks_like_plain_chat(speaker, message):
-    """Conservative fallback for servers/loggers that omit a channel marker."""
-    sp = clean_nwn_text(speaker)
-    msg = clean_nwn_text(message)
-    if not sp or not msg or len(sp) > 80:
-        return False
-    low = sp.casefold()
-    if low in GENERIC_SYSTEM_SPEAKERS:
-        return False
-    system_prefixes = (
-        "experience points", "acquired item", "lost item", "your journal",
-        "current module", "loading screen", "area setting", "server",
-        "messages for", "the date is", "the time is", "food", "rest", "piety",
-    )
-    if low.startswith(system_prefixes):
-        return False
-    # Names/NPC labels are usually short. This avoids converting long system prose
-    # before a colon into fake speakers.
-    if len(sp.split()) > 8:
-        return False
-    # Plain chat is accepted only when it resembles roleplay/dialogue.
-    lead = msg.lstrip()[:1]
-    return lead in {'"', "'", "*", "[", "("} or len(msg.split()) <= 30
-
-
-def _parse_adaptive_chat(raw, character_name, server_profile):
-    # CHAT WINDOW TEXT lines need their timestamp/header removed before any
-    # generic structured pattern is tried; otherwise the header can be mistaken
-    # for a speaker/account identifier.
-    if raw.startswith("[CHAT WINDOW TEXT]"):
-        cleaned = clean_nwn_text(_strip_chat_window_prefix(raw))
-        m = CHAT_WINDOW_CHANNEL_RE.match(cleaned)
-        if m:
-            return _build_chat_event(m.group("speaker"), m.group("message"), m.group("channel"), character_name, server_profile)
-        m = CHAT_WINDOW_PLAIN_RE.match(cleaned)
-        if m and _looks_like_plain_chat(m.group("speaker"), m.group("message")):
-            return _build_chat_event(m.group("speaker"), m.group("message"), "Talk", character_name, server_profile)
-        return None
-
-    event = _parse_standard_structured_chat(raw, character_name, server_profile)
-    if event:
-        return event
-
-    m = ALT_CHANNEL_FIRST_RE.match(raw)
-    if m:
-        return _build_chat_event(m.group("speaker"), m.group("message"), m.group("channel"), character_name, server_profile)
-
-    m = ALT_SPEAKER_CHANNEL_RE.match(raw)
-    if m:
-        return _build_chat_event(m.group("speaker"), m.group("message"), m.group("channel"), character_name, server_profile)
-
-    return None
-
-
-def detect_log_format(text):
-    """Classify the dominant chat representation for diagnostics/profile caching."""
-    counts = {"structured": 0, "channel_first": 0, "speaker_channel": 0, "chat_window": 0}
-    for raw in str(text or "").splitlines()[-2500:]:
-        line = raw.strip()
-        if not line:
-            continue
-        if STRUCTURED_CHAT_RE.match(line):
-            counts["structured"] += 1
-        elif ALT_CHANNEL_FIRST_RE.match(line):
-            counts["channel_first"] += 1
-        elif ALT_SPEAKER_CHANNEL_RE.match(line):
-            counts["speaker_channel"] += 1
-        elif line.startswith("[CHAT WINDOW TEXT]"):
-            cleaned = clean_nwn_text(_strip_chat_window_prefix(line))
-            if CHAT_WINDOW_CHANNEL_RE.match(cleaned) or CHAT_WINDOW_PLAIN_RE.match(cleaned):
-                counts["chat_window"] += 1
-    # Prefer the machine-readable structured copy whenever it exists. NWN often
-    # writes a human-readable CHAT WINDOW TEXT line immediately before the same
-    # structured message; choosing structured avoids duplicate RP context.
-    for name in ("structured", "channel_first", "speaker_channel", "chat_window"):
-        if counts[name]:
-            return name
-    return "adaptive"
-
-
-def parse_chat_line(line, character_name, server_profile="AUTO", parser_profile="adaptive", game_version="nwn_ee"):
-    raw = str(line or "").strip()
-    if not raw:
-        return None
-    if str(game_version).startswith("nwn2"):
-        return parse_nwn2(raw, character_name, server_profile, _build_chat_event)
-    mode = str(parser_profile or "adaptive").casefold()
-    if mode == "structured":
-        if raw.startswith("[CHAT WINDOW TEXT]"):
-            return None
-        return _parse_standard_structured_chat(raw, character_name, server_profile)
-    if mode == "channel_first":
-        if raw.startswith("[CHAT WINDOW TEXT]"):
-            return None
-        m = ALT_CHANNEL_FIRST_RE.match(raw)
-        return _build_chat_event(m.group("speaker"), m.group("message"), m.group("channel"), character_name, server_profile) if m else None
-    if mode == "speaker_channel":
-        if raw.startswith("[CHAT WINDOW TEXT]"):
-            return None
-        m = ALT_SPEAKER_CHANNEL_RE.match(raw)
-        return _build_chat_event(m.group("speaker"), m.group("message"), m.group("channel"), character_name, server_profile) if m else None
-    if mode == "chat_window":
-        if not raw.startswith("[CHAT WINDOW TEXT]"):
-            return None
-        return _parse_adaptive_chat(raw, character_name, server_profile)
-    # Unknown formats remain permissive until a scan learns the local layout.
-    return _parse_adaptive_chat(raw, character_name, server_profile)
-
-
-
-class LogFollower:
-    """Follow a file that NWN may truncate or replace while running."""
-
-    def __init__(self, path, poll_interval=0.1):
-        self.path = Path(path)
-        self.poll_interval = poll_interval
-        self.file = None
-        self.identity = None
-        self.position = 0
-
-    @staticmethod
-    def _identity_from_stat(st):
-        # st_ino is usable on modern Windows Python. Size/mtime are fallback hints.
-        return (getattr(st, "st_ino", None), getattr(st, "st_dev", None))
-
-    def _close(self):
-        if self.file:
-            try:
-                self.file.close()
-            except Exception:
-                pass
-        self.file = None
-        self.identity = None
-        self.position = 0
-
-    def _open_at_end(self):
-        self.file = open(self.path, "r", encoding="utf-8", errors="replace")
-        st = os.fstat(self.file.fileno())
-        self.identity = self._identity_from_stat(st)
-        self.file.seek(0, os.SEEK_END)
-        self.position = self.file.tell()
-
-    def _open_at_start(self):
-        self.file = open(self.path, "r", encoding="utf-8", errors="replace")
-        st = os.fstat(self.file.fileno())
-        self.identity = self._identity_from_stat(st)
-        self.file.seek(0)
-        self.position = 0
-
-    def lines(self, stop_event):
-        first_open = True
-
-        while not stop_event.is_set():
-            try:
-                if self.file is None:
-                    if not self.path.exists():
-                        time.sleep(0.5)
-                        continue
-
-                    # On initial launch, ignore old contents. If NWN later truncates
-                    # or replaces the file, we reopen from the beginning.
-                    if first_open:
-                        self._open_at_end()
-                        first_open = False
-                    else:
-                        self._open_at_start()
-
-                line = self.file.readline()
-                if line:
-                    self.position = self.file.tell()
-                    yield line.rstrip("\r\n")
-                    continue
-
-                # No new data. Check whether the path now refers to a new file,
-                # or whether NWN truncated the current one.
-                try:
-                    path_stat = self.path.stat()
-                    handle_stat = os.fstat(self.file.fileno())
-
-                    path_identity = self._identity_from_stat(path_stat)
-                    handle_identity = self._identity_from_stat(handle_stat)
-
-                    replaced = (
-                        path_identity != (None, None)
-                        and handle_identity != (None, None)
-                        and path_identity != handle_identity
-                    )
-                    truncated = path_stat.st_size < self.position
-
-                    if replaced or truncated:
-                        self._close()
-                        continue
-                except FileNotFoundError:
-                    self._close()
-                    continue
-
-                time.sleep(self.poll_interval)
-
-            except (PermissionError, OSError) as exc:
-                print(f"[LOG] Waiting for readable log file: {exc}")
-                self._close()
-                time.sleep(0.5)
-
-        self._close()
-
 
 
 # Windows SendInput definitions.

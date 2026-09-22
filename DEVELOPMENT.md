@@ -76,10 +76,21 @@ entry points, tests, documentation and build scripts as well.
 Provider exceptions should remain actionable and must never include API keys,
 complete prompts, private Tells or personal filesystem paths.
 
+## Adding a game-log format
+
+1. Add platform-neutral directory discovery or normalization to
+   `src/roleweaver/games.py`.
+2. Add parsing behavior under `src/roleweaver/conversation/` and return a
+   `ChatEvent`; do not pass raw platform log lines into AI providers.
+3. Keep system/combat lines conservative so they cannot become false speakers.
+4. Add fixtures to `tests/test_games.py` or a focused contract test without
+   including a real player's log.
+5. Run both Windows/shared and Linux suites because both clients consume the
+   same parser and follower.
+
 ## Pull-request scope
 
 Keep refactors separable from behavior changes. A package extraction should
 first preserve behavior; feature work can then depend on the new interface in a
 later commit or pull request. This makes regressions and platform drift easier
 to identify.
-
