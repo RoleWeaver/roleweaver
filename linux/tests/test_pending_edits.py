@@ -45,6 +45,10 @@ class PendingTests(unittest.TestCase):
         bot.summary_journal.append({"speaker": "Alice", "channel": "Talk", "message": text, "self": False, "_mode": "IC"})
         bot.summary_event_buffer = bot.summary_journal.events()
 
+    def test_relationship_name_filter_supports_accented_names_and_curly_apostrophes(self):
+        self.assertTrue(self.core.is_likely_relationship_character("Élodie D’Arcy"))
+        self.assertFalse(self.core.is_likely_relationship_character("the people in the city"))
+
     def test_queue_survives_restart_and_commits(self):
         first = self.bot()
         self.queue(first)

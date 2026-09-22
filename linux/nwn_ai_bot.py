@@ -1007,7 +1007,7 @@ def load_relevant_lore(context_text, server_profile="AUTO", max_files=3, max_cha
         return []
 
     haystack = (context_text or "").casefold()
-    words = set(re.findall(r"[a-zA-Z0-9_'â€™-]{4,}", haystack))
+    words = set(re.findall(r"[a-zA-Z0-9_'’-]{4,}", haystack))
     ranked = []
 
     for path in files:
@@ -1018,8 +1018,8 @@ def load_relevant_lore(context_text, server_profile="AUTO", max_files=3, max_cha
         if not text:
             continue
 
-        stem_words = set(re.findall(r"[a-zA-Z0-9_'â€™-]{3,}", path.stem.casefold()))
-        body_words = set(re.findall(r"[a-zA-Z0-9_'â€™-]{5,}", text.casefold()))
+        stem_words = set(re.findall(r"[a-zA-Z0-9_'’-]{3,}", path.stem.casefold()))
+        body_words = set(re.findall(r"[a-zA-Z0-9_'’-]{5,}", text.casefold()))
         score = 0
 
         # Files prefixed with always_ are always included, but only for this server.
@@ -1095,10 +1095,10 @@ def is_likely_relationship_character(name, confirmed_names=()):
     confirmed = {normalize_identity_name(x).casefold() for x in confirmed_names if normalize_identity_name(x)}
     if folded in confirmed:
         return True
-    words = re.findall(r"[A-Za-zÃ€-Ã–Ã˜-Ã¶Ã¸-Ã¿'â€™-]+", clean)
+    words = re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ'’-]+", clean)
     if not words or len(words) > 5:
         return False
-    low = [w.casefold().strip("'â€™-.") for w in words]
+    low = [w.casefold().strip("'’-.") for w in words]
     if low[0] in {"the", "a", "an", "some", "those", "these", "our", "their"}:
         return False
     if any(w in RELATIONSHIP_GENERIC_ENTITY_WORDS for w in low):
@@ -1464,7 +1464,7 @@ class NWNAIBot(AFKMixin):
         if not usable:
             return []
 
-        query_words = set(re.findall(r"[a-zA-Z0-9_'â€™-]{4,}", str(query_text or "").casefold()))
+        query_words = set(re.findall(r"[a-zA-Z0-9_'’-]{4,}", str(query_text or "").casefold()))
 
         # Always preserve the newest two, then fill remaining slots with the
         # strongest mix of topic relevance and durable importance. This lets an
@@ -1477,7 +1477,7 @@ class NWNAIBot(AFKMixin):
             text = str(item.get("summary", "")) + " " + " ".join(
                 str(x) for x in (item.get("topics") or []) if str(x).strip()
             )
-            words = set(re.findall(r"[a-zA-Z0-9_'â€™-]{4,}", text.casefold()))
+            words = set(re.findall(r"[a-zA-Z0-9_'’-]{4,}", text.casefold()))
             overlap = len(words & query_words)
             try:
                 importance = int(item.get("importance", 0) or 0)
@@ -2232,7 +2232,7 @@ class NWNAIBot(AFKMixin):
                         continue
                     importance = int(item.get("importance", 0) or 0)
                     stamp = str(item.get("timestamp") or "")[:10]
-                    prefix = f"  â€¢ {stamp}: " if stamp else "  â€¢ "
+                    prefix = f"  • {stamp}: " if stamp else "  • "
                     suffix = f" [importance {importance}/10]" if importance else ""
                     lines.append(prefix + summary + suffix)
 
