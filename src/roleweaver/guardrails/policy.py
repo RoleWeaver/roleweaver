@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-FALLBACK = "Let us keep to matters of this world. What do you need?"
+FALLBACK = "*They steer the conversation toward less troubling matters.*"
 
 CATEGORY_LABELS = {
     "size_format": "Size and control characters",
@@ -30,12 +30,12 @@ DEFAULT_ACTIONS = {
     "secret_request": "block",
     "instruction_leak": "block",
     "model_disclosure": "replace",
-    "pii": "warn",
-    "toxicity": "warn",
-    "harassment": "warn",
-    "sexual_content": "warn",
-    "graphic_violence": "warn",
-    "custom": "block",
+    "pii": "replace",
+    "toxicity": "replace",
+    "harassment": "replace",
+    "sexual_content": "replace",
+    "graphic_violence": "replace",
+    "custom": "replace",
 }
 
 ACTION_VALUES = ("off", "warn", "block", "replace")

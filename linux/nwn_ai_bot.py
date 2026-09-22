@@ -19,7 +19,7 @@ from roleweaver.conversation import (
     parse_chat_line,
     strip_chat_window_prefix as _strip_chat_window_prefix,
 )
-from roleweaver.config import SettingsStore, default_settings
+from roleweaver.config import SettingsStore, default_settings, restore_guardrail_defaults
 from roleweaver.games import GAME_VERSIONS, default_game_log, discover_game_logs, switch_game
 from roleweaver.paths import RuntimePaths
 from roleweaver.guardrails import (

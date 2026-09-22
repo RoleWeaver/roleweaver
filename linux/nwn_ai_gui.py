@@ -1171,7 +1171,7 @@ class NWNAIApp:
         self.guardrail_retry_var = tk.BooleanVar(value=bool(self.settings.get("guardrail_retry_output_once", True)))
         ttk.Checkbutton(behavior, text="Retry a rejected output once before applying Block or Replace", variable=self.guardrail_retry_var).grid(row=0, column=0, columnspan=2, sticky="w")
         ttk.Label(behavior, text="Replacement reply:").grid(row=1, column=0, sticky="w", pady=3)
-        self.guardrail_replacement_var = tk.StringVar(value=self.settings.get("guardrail_replacement_text", "Let us keep to matters of this world. What do you need?"))
+        self.guardrail_replacement_var = tk.StringVar(value=self.settings.get("guardrail_replacement_text", "*They steer the conversation toward less troubling matters.*"))
         ttk.Entry(behavior, textvariable=self.guardrail_replacement_var).grid(row=1, column=1, sticky="ew", padx=(8, 0), pady=3); behavior.columnconfigure(1, weight=1)
         custom = ttk.LabelFrame(frame, text="Custom policy", padding=7); custom.pack(fill="both", expand=True, pady=(7, 0))
         ttk.Label(custom, text="Terms (one per line):").grid(row=0, column=0, sticky="nw")
@@ -1180,7 +1180,9 @@ class NWNAIApp:
         self.guardrail_terms_text.grid(row=1, column=0, sticky="nsew", pady=(3, 0)); self.guardrail_regex_text.grid(row=1, column=1, sticky="nsew", padx=(12, 0), pady=(3, 0))
         self.guardrail_terms_text.insert("1.0", self.settings.get("guardrail_custom_terms", "")); self.guardrail_regex_text.insert("1.0", self.settings.get("guardrail_custom_regex", ""))
         custom.columnconfigure(0, weight=1); custom.columnconfigure(1, weight=1); custom.rowconfigure(1, weight=1)
-        ttk.Button(frame, text="Save policy", command=self._save_guardrail_policy).pack(anchor="e", pady=(7, 0))
+        buttons = ttk.Frame(frame); buttons.pack(fill="x", pady=(7, 0))
+        ttk.Button(buttons, text="Restore Defaults", command=self._restore_guardrail_defaults).pack(side="left")
+        ttk.Button(buttons, text="Save policy", command=self._save_guardrail_policy).pack(side="right")
         self._load_guardrail_policy()
 
     def _load_guardrail_policy(self, _event=None):
@@ -1213,6 +1215,21 @@ class NWNAIApp:
             self.settings.update(guardrail_custom_terms=self.guardrail_terms_text.get("1.0", "end-1c").strip(), guardrail_custom_regex=expression_text, guardrail_replacement_text=self.guardrail_replacement_var.get().strip(), guardrail_retry_output_once=bool(self.guardrail_retry_var.get()))
             core.save_settings(self.settings); messagebox.showinfo("Guardrails", "Policy saved. It applies to new AI requests; size limits apply after Start.")
         except Exception as exc: messagebox.showerror("Guardrails", str(exc))
+
+    def _restore_guardrail_defaults(self):
+        if not messagebox.askyesno(
+            "Restore Guardrail Defaults",
+            "Restore the shipped PG guardrail profile?\n\nThis clears custom terms and regular expressions. Token pricing and usage history are not changed.",
+            parent=self.root,
+        ):
+            return
+        core.restore_guardrail_defaults(self.settings); core.save_settings(self.settings)
+        self.guardrail_policy_purpose_var.set("Default"); self.guardrail_retry_var.set(True)
+        self.guardrail_replacement_var.set(self.settings["guardrail_replacement_text"])
+        for widget in (self.guardrail_terms_text, self.guardrail_regex_text): widget.delete("1.0", "end")
+        self.guardrail_input_limit_var.set(str(self.settings["guardrail_input_max_characters"])); self.guardrail_output_limit_var.set(str(self.settings["guardrail_output_max_characters"]))
+        self._load_guardrail_policy()
+        messagebox.showinfo("Guardrails", "The shipped PG guardrail defaults have been restored. Character limits apply after the next Start.", parent=self.root)
 
     def _build_guardrail_events_page(self, frame):
         toolbar = ttk.Frame(frame); toolbar.pack(fill="x", pady=(0, 6))

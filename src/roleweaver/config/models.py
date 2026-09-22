@@ -4,6 +4,41 @@ from __future__ import annotations
 
 from typing import Any, TypedDict
 
+GUARDRAIL_POLICY_VERSION = 2
+GUARDRAIL_INPUT_MAX_CHARACTERS = 50000
+GUARDRAIL_OUTPUT_MAX_CHARACTERS = 10000
+GUARDRAIL_REPLACEMENT_TEXT = (
+    "*They steer the conversation toward less troubling matters.*"
+)
+PG_GUARDRAIL_ACTIONS = {
+    "size_format": "block",
+    "instruction_override": "block",
+    "secret_request": "block",
+    "instruction_leak": "block",
+    "model_disclosure": "replace",
+    "pii": "replace",
+    "toxicity": "replace",
+    "harassment": "replace",
+    "sexual_content": "replace",
+    "graphic_violence": "replace",
+    "custom": "replace",
+}
+SUMMARY_GUARDRAIL_OVERRIDES = {
+    "toxicity": "warn",
+    "harassment": "warn",
+    "sexual_content": "warn",
+    "graphic_violence": "warn",
+}
+LEGACY_GUARDRAIL_ACTIONS = {
+    **PG_GUARDRAIL_ACTIONS,
+    "pii": "warn",
+    "toxicity": "warn",
+    "harassment": "warn",
+    "sexual_content": "warn",
+    "graphic_violence": "warn",
+    "custom": "block",
+}
+
 
 class RoleWeaverSettings(TypedDict, total=False):
     """Documented built-in settings; extensions may preserve additional keys."""
@@ -49,6 +84,7 @@ class RoleWeaverSettings(TypedDict, total=False):
     campaign_id: str
     character_mismatch_check: bool
     guardrail_backend: str
+    guardrail_policy_version: int
     guardrail_input_max_characters: int
     guardrail_output_max_characters: int
     guardrail_default_policies: dict[str, str]
@@ -105,26 +141,69 @@ def default_settings(default_log_path: str, *, keyboard_method: str) -> RoleWeav
         "campaign_id": "default",
         "character_mismatch_check": True,
         "guardrail_backend": "guardrails_ai",
-        "guardrail_input_max_characters": 50000,
-        "guardrail_output_max_characters": 10000,
-        "guardrail_default_policies": {
-            "size_format": "block",
-            "instruction_override": "block",
-            "secret_request": "block",
-            "instruction_leak": "block",
-            "model_disclosure": "replace",
-            "pii": "warn",
-            "toxicity": "warn",
-            "harassment": "warn",
-            "sexual_content": "warn",
-            "graphic_violence": "warn",
-            "custom": "block",
+        "guardrail_policy_version": GUARDRAIL_POLICY_VERSION,
+        "guardrail_input_max_characters": GUARDRAIL_INPUT_MAX_CHARACTERS,
+        "guardrail_output_max_characters": GUARDRAIL_OUTPUT_MAX_CHARACTERS,
+        "guardrail_default_policies": dict(PG_GUARDRAIL_ACTIONS),
+        "guardrail_purpose_policies": {
+            "summary": dict(SUMMARY_GUARDRAIL_OVERRIDES),
         },
-        "guardrail_purpose_policies": {},
         "guardrail_custom_terms": "",
         "guardrail_custom_regex": "",
-        "guardrail_replacement_text": "Let us keep to matters of this world. What do you need?",
+        "guardrail_replacement_text": GUARDRAIL_REPLACEMENT_TEXT,
         "guardrail_retry_output_once": True,
         "usage_input_cost_per_million": None,
         "usage_output_cost_per_million": None,
     }
+
+
+def restore_guardrail_defaults(settings: dict[str, Any]) -> dict[str, Any]:
+    """Restore the shipped guardrail profile without changing usage pricing."""
+
+    settings.update(
+        guardrail_backend="guardrails_ai",
+        guardrail_policy_version=GUARDRAIL_POLICY_VERSION,
+        guardrail_input_max_characters=GUARDRAIL_INPUT_MAX_CHARACTERS,
+        guardrail_output_max_characters=GUARDRAIL_OUTPUT_MAX_CHARACTERS,
+        guardrail_default_policies=dict(PG_GUARDRAIL_ACTIONS),
+        guardrail_purpose_policies={
+            "summary": dict(SUMMARY_GUARDRAIL_OVERRIDES),
+        },
+        guardrail_custom_terms="",
+        guardrail_custom_regex="",
+        guardrail_replacement_text=GUARDRAIL_REPLACEMENT_TEXT,
+        guardrail_retry_output_once=True,
+    )
+    return settings
+
+
+def migrate_guardrail_policy(settings: dict[str, Any]) -> dict[str, Any]:
+    """Apply the PG defaults once without overwriting later user choices."""
+
+    try:
+        version = int(settings.get("guardrail_policy_version", 0))
+    except (TypeError, ValueError):
+        version = 0
+    if version >= GUARDRAIL_POLICY_VERSION:
+        return settings
+
+    current = settings.get("guardrail_default_policies")
+    if not isinstance(current, dict) or current == LEGACY_GUARDRAIL_ACTIONS:
+        settings["guardrail_default_policies"] = dict(PG_GUARDRAIL_ACTIONS)
+
+    purpose_policies = settings.get("guardrail_purpose_policies")
+    if not isinstance(purpose_policies, dict):
+        purpose_policies = {}
+    if "summary" not in purpose_policies:
+        purpose_policies["summary"] = dict(SUMMARY_GUARDRAIL_OVERRIDES)
+    settings["guardrail_purpose_policies"] = purpose_policies
+
+    old_replacement = "Let us keep to matters of this world. What do you need?"
+    replacement = settings.get("guardrail_replacement_text")
+    if replacement is None or replacement == "" or replacement == old_replacement:
+        settings["guardrail_replacement_text"] = GUARDRAIL_REPLACEMENT_TEXT
+    settings["guardrail_retry_output_once"] = bool(
+        settings.get("guardrail_retry_output_once", True)
+    )
+    settings["guardrail_policy_version"] = GUARDRAIL_POLICY_VERSION
+    return settings

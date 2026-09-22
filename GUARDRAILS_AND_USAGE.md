@@ -56,11 +56,24 @@ Every category has one of four actions:
 - **Replace** redacts matching input material or substitutes the configured
   safe output reply.
 
-Purpose-specific policies inherit the Default policy until overridden. By
-default, instruction and secret leakage is blocked, model disclosure is
-replaced, and RP-sensitive content categories warn rather than block.
+Purpose-specific policies inherit the Default policy until overridden. The
+shipped PG-oriented profile blocks malformed input, instruction overrides and
+secret leakage. It replaces model disclosure, personal information, toxic
+language, harassment, explicit sexual content, graphic violence and custom
+matches. Summaries override the four mature-content categories to **Warn** so
+existing RP can still be recorded accurately without changing the source text.
 Policy changes apply to new requests immediately. Input and output size-limit
 changes apply after the next **Start**.
+
+**Restore Defaults** on the Policy page restores this complete shipped profile,
+including character limits, the summary overrides, retry behavior and the safe
+replacement. It also clears custom terms and expressions. Provider token-price
+estimates and usage history are not changed.
+
+These policies apply when Role Weaver sends input to the LLM and when it
+receives generated output. They do not recheck text that the player manually
+adds or edits afterward; the player retains control over what is finally posted
+to the game.
 
 When output retry is enabled, Role Weaver asks the configured provider for one
 fresh response after a Block or Replace decision. The retry instruction names

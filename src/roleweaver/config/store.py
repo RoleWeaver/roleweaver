@@ -10,7 +10,7 @@ from typing import Any
 
 from roleweaver.storage import atomic
 
-from .models import RoleWeaverSettings
+from .models import RoleWeaverSettings, migrate_guardrail_policy
 
 SettingsMapping = Mapping[str, Any]
 SettingsMigrator = Callable[[dict[str, Any]], dict[str, Any] | None]
@@ -45,6 +45,7 @@ class SettingsStore:
             raise ValueError("settings.json must contain a JSON object")
         if self.migrate:
             loaded = self.migrate(loaded) or loaded
+        loaded = migrate_guardrail_policy(loaded)
 
         merged = copy.deepcopy(self.defaults)
         merged.update(loaded)
