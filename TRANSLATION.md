@@ -78,8 +78,16 @@ Activity. **Translate Last 3** translates the newest incoming game-chat lines;
 The **Language Settings** page selects the user's language, game language,
 incoming auto-detection, and protected terminology. F8 candidates and F9 replies
 are drafted in the user's language. A second editable editor contains the game-
-language translation. The player explicitly translates again after editing the
-first draft, then reviews the game-language draft before pasting it into NWN.
+language translation. **Generate in My Language**, **Shorter**, and **Longer**
+use the current text in the first editor as their seed; if that editor is empty,
+Generate starts from the recent scene. **Translate to Game Language** sends the
+chosen/edited first draft to the second editor. **Refine in Game Language** uses
+the current second editor text as its seed without regenerating from scratch.
+**Translate to My Language** back-translates the second editor for review while
+leaving its game-language text intact. F9 still creates and translates a new
+reply in one step. Before pasting, the player reviews the second editor; edits
+to the first editor require translating again. Ctrl+Z in either editor restores
+the previous text after a generated or translated replacement.
 
 For older NWN logs, the game language also selects the character encoding used
 when a line is not UTF-8. Spanish, German, French, Italian, and Dutch use

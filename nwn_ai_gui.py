@@ -603,6 +603,12 @@ class NWNAIApp:
         upper_split.add(activity, minsize=280, stretch="always")
         upper_split.add(translation, minsize=280, stretch="always")
 
+        activity_buttons = ttk.Frame(activity)
+        activity_buttons.pack(fill="x", pady=(0, 7))
+        ttk.Button(
+            activity_buttons, text="Clear Activity Display", command=self.clear_activity_display
+        ).pack(side="right")
+
         self.log_text = tk.Text(
             activity,
             width=74,
@@ -729,6 +735,26 @@ class NWNAIApp:
         game_draft_frame = ttk.LabelFrame(draft_editors, text="Draft in game language", padding=4)
         draft_editors.add(user_draft_frame, minsize=70, stretch="always")
         draft_editors.add(game_draft_frame, minsize=70, stretch="always")
+        user_draft_buttons = ttk.Frame(user_draft_frame)
+        user_draft_buttons.pack(fill="x", pady=(0, 5))
+        self.regenerate_btn = ttk.Button(
+            user_draft_buttons, text="Generate in My Language",
+            command=self.regenerate_draft, state="disabled",
+        )
+        self.regenerate_btn.pack(side="left")
+        self.shorter_btn = ttk.Button(
+            user_draft_buttons, text="Shorter", command=self.shorter_draft, state="disabled"
+        )
+        self.shorter_btn.pack(side="left", padx=(6, 0))
+        self.longer_btn = ttk.Button(
+            user_draft_buttons, text="Longer", command=self.longer_draft, state="disabled"
+        )
+        self.longer_btn.pack(side="left", padx=(6, 0))
+        self.translate_draft_btn = ttk.Button(
+            user_draft_buttons, text="Translate to Game Language →",
+            command=self.translate_current_draft, state="disabled",
+        )
+        self.translate_draft_btn.pack(side="right")
         self.ai_draft_text = tk.Text(
             user_draft_frame,
             height=5,
@@ -746,6 +772,18 @@ class NWNAIApp:
             font=("Segoe UI", 10),
         )
         self.ai_draft_text.pack(fill="both", expand=True)
+        game_draft_buttons = ttk.Frame(game_draft_frame)
+        game_draft_buttons.pack(fill="x", pady=(0, 5))
+        self.refine_game_btn = ttk.Button(
+            game_draft_buttons, text="Refine in Game Language",
+            command=self.refine_game_draft, state="disabled",
+        )
+        self.refine_game_btn.pack(side="left")
+        self.backtranslate_btn = ttk.Button(
+            game_draft_buttons, text="← Translate to My Language",
+            command=self.translate_game_draft, state="disabled",
+        )
+        self.backtranslate_btn.pack(side="right")
         self.translated_draft_text = tk.Text(
             game_draft_frame, height=5, wrap="word", undo=True, bg="#1e1f22",
             fg="#dbdee1", insertbackground="#dbdee1", selectbackground="#5865f2",
@@ -757,18 +795,6 @@ class NWNAIApp:
         draft_buttons = ttk.Frame(draft_frame)
         draft_buttons.pack(fill="x", pady=(7, 0))
 
-        self.regenerate_btn = ttk.Button(
-            draft_buttons, text="Regenerate", command=self.regenerate_draft, state="disabled"
-        )
-        self.regenerate_btn.pack(side="left")
-        self.shorter_btn = ttk.Button(
-            draft_buttons, text="Shorter", command=self.shorter_draft, state="disabled"
-        )
-        self.shorter_btn.pack(side="left", padx=(6, 0))
-        self.longer_btn = ttk.Button(
-            draft_buttons, text="Longer", command=self.longer_draft, state="disabled"
-        )
-        self.longer_btn.pack(side="left", padx=(6, 0))
         self.clear_draft_btn = ttk.Button(
             draft_buttons, text="Clear", command=self.clear_ai_draft, state="disabled"
         )
@@ -781,11 +807,6 @@ class NWNAIApp:
             style="Accent.TButton",
         )
         self.paste_draft_btn.pack(side="right")
-        self.translate_draft_btn = ttk.Button(
-            draft_buttons, text="Translate Draft →", command=self.translate_current_draft,
-            state="disabled",
-        )
-        self.translate_draft_btn.pack(side="right", padx=(6, 0))
 
         # Exact content used in the latest AI reply request. Read-only.
         ttk.Label(
@@ -1191,9 +1212,6 @@ class NWNAIApp:
             text="Drag either divider to resize panels",
             foreground="#949ba4",
         ).pack(side="left", padx=(14, 0))
-        ttk.Button(
-            bottom, text="Clear Activity Display", command=self.clear_activity_display
-        ).pack(side="right")
 
     def _build_language_settings_tab(self, frame):
         ttk.Label(
@@ -3228,6 +3246,8 @@ class NWNAIApp:
             self.paste_draft_btn.configure(state="normal")
             self.clear_draft_btn.configure(state="normal")
             self.translate_draft_btn.configure(state="normal")
+            self.refine_game_btn.configure(state="normal")
+            self.backtranslate_btn.configure(state="normal")
             self.translate_chat_btn.configure(state="normal")
             self.save_relationship_btn.configure(state="normal")
             self.ignore_context_btn.configure(state="normal")
@@ -3252,6 +3272,8 @@ class NWNAIApp:
             self.paste_draft_btn.configure(state="disabled")
             self.clear_draft_btn.configure(state="disabled")
             self.translate_draft_btn.configure(state="disabled")
+            self.refine_game_btn.configure(state="disabled")
+            self.backtranslate_btn.configure(state="disabled")
             self.translate_chat_btn.configure(state="disabled")
             self.save_relationship_btn.configure(state="disabled")
             self.ignore_context_btn.configure(state="disabled")
@@ -3277,6 +3299,13 @@ class NWNAIApp:
         if self.bot:
             self.bot.toggle_afk()
 
+    @staticmethod
+    def _replace_draft_text(widget, text):
+        # Keep the previous editor contents available through Ctrl+Z.
+        widget.edit_separator()
+        widget.replace("1.0", "end", text)
+        widget.edit_separator()
+
     def _select_candidate(self, event=None):
         if not self.bot:
             return
@@ -3286,11 +3315,10 @@ class NWNAIApp:
             index = 0
         if 0 <= index < len(self.bot.candidate_replies):
             text = self.bot.candidate_replies[index]
-            self.ai_draft_text.delete("1.0", "end")
-            self.ai_draft_text.insert("1.0", text)
+            self._replace_draft_text(self.ai_draft_text, text)
             self.bot._publish_draft(text)
             self.last_seen_draft_version = self.bot.last_draft_version
-            self.bot.action_queue.put(("translate_draft", text))
+            self.bot.translation_status = "Candidate selected. Translate it when ready."
 
     def _refresh_history_files(self):
         if not self.bot:
@@ -3845,7 +3873,10 @@ class NWNAIApp:
     def _request_draft_variant(self, variant):
         if self.bot:
             self.set_guidance_if_changed()
-            self.bot.action_queue.put(("draft_variant", variant))
+            text = self.ai_draft_text.get("1.0", "end").strip()
+            self.bot.action_queue.put(("revise_editor_draft", {
+                "language": "user", "seed": text, "mode": variant,
+            }))
 
     def regenerate_draft(self):
         self._request_draft_variant("regenerate")
@@ -3855,6 +3886,29 @@ class NWNAIApp:
 
     def longer_draft(self):
         self._request_draft_variant("longer")
+
+    def refine_game_draft(self):
+        if not self.bot:
+            return
+        text = self.translated_draft_text.get("1.0", "end").strip()
+        if not text:
+            self._append_log("[DRAFT] The game-language draft is empty.")
+            return
+        self.set_guidance_if_changed()
+        self.bot.action_queue.put(("revise_editor_draft", {
+            "language": "game", "seed": text, "mode": "regenerate",
+            "user_source": self.ai_draft_text.get("1.0", "end").strip(),
+        }))
+
+    def translate_game_draft(self):
+        if not self.bot:
+            return
+        text = self.translated_draft_text.get("1.0", "end").strip()
+        if not text:
+            self._append_log("[TRANSLATION] The game-language draft is empty.")
+            return
+        self._save_language_settings()
+        self.bot.action_queue.put(("translate_game_draft", text))
 
     def paste_current_draft(self):
         if not self.bot:
@@ -3877,8 +3931,8 @@ class NWNAIApp:
         self.bot.action_queue.put(("paste_existing_draft", text))
 
     def clear_ai_draft(self):
-        self.ai_draft_text.delete("1.0", "end")
-        self.translated_draft_text.delete("1.0", "end")
+        self._replace_draft_text(self.ai_draft_text, "")
+        self._replace_draft_text(self.translated_draft_text, "")
         if self.bot:
             self.bot.last_draft = ""
             self.bot.translated_draft = ""
@@ -3963,15 +4017,11 @@ class NWNAIApp:
                 if self.bot.last_draft_version != self.last_seen_draft_version:
                     self.last_seen_draft_version = self.bot.last_draft_version
                     if self.bot.last_draft:
-                        self.ai_draft_text.delete("1.0", "end")
-                        self.ai_draft_text.insert("1.0", self.bot.last_draft)
-                        if self.bot.translated_draft_source != self.bot.last_draft:
-                            self.bot.action_queue.put(("translate_draft", self.bot.last_draft))
+                        self._replace_draft_text(self.ai_draft_text, self.bot.last_draft)
 
                 if self.bot.translated_draft_version != self.last_seen_translated_draft_version:
                     self.last_seen_translated_draft_version = self.bot.translated_draft_version
-                    self.translated_draft_text.delete("1.0", "end")
-                    self.translated_draft_text.insert("1.0", self.bot.translated_draft)
+                    self._replace_draft_text(self.translated_draft_text, self.bot.translated_draft)
 
                 if self.bot.translated_chat_version != self.last_seen_translation_version:
                     self.last_seen_translation_version = self.bot.translated_chat_version

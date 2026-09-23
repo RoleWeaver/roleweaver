@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import queue
 import threading
+import tkinter as tk
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
@@ -119,6 +120,84 @@ class ClientFixTests(unittest.TestCase):
         self.assertEqual(bot.translated_chat[0]["text"], "Hello")
         self.assertEqual(bot.translated_draft, "Guten Abend")
         self.assertEqual(bot.translated_draft_source, "Good evening")
+
+    def test_editor_revision_uses_current_seed_and_target_language(self):
+        bot = self.fixture.bot()
+        bot.settings.update(user_language="French", game_language="German")
+        bot.request_ai = Mock(return_value=SimpleNamespace(
+            text="Neue Fassung", duration_seconds=0.1, model="test-model"
+        ))
+        self.assertEqual(bot.revise_editor_draft({
+            "language": "game", "seed": "Mein bearbeiteter Satz",
+            "user_source": "Ma phrase", "mode": "regenerate",
+        }), "Neue Fassung")
+        instructions, prompt = bot.request_ai.call_args.args[:2]
+        self.assertIn("Write the draft in German", instructions)
+        self.assertIn("Mein bearbeiteter Satz", prompt)
+        self.assertEqual(bot.translated_draft_source, "Ma phrase")
+        self.assertEqual(bot.translated_draft, "Neue Fassung")
+        self.assertEqual(bot.last_draft_version, 0)
+
+        bot.request_ai.return_value.text = "Nouvelle réponse"
+        self.assertEqual(bot.revise_editor_draft({
+            "language": "user", "seed": "Ma phrase modifiée", "mode": "shorter",
+        }), "Nouvelle réponse")
+        instructions, prompt = bot.request_ai.call_args.args[:2]
+        self.assertIn("Write the draft in French", instructions)
+        self.assertIn("Ma phrase modifiée", prompt)
+        self.assertIn("noticeably shorter", prompt)
+        self.assertEqual(bot.last_draft, "Nouvelle réponse")
+
+    def test_backtranslation_keeps_edited_game_draft_authoritative(self):
+        bot = self.fixture.bot()
+        bot.settings.update(user_language="English", game_language="German")
+        bot.translation_service = Mock()
+        bot.translation_service.translate.return_value.message.return_value.translated_text = "My edited line"
+        self.assertEqual(bot.translate_game_draft("Mein bearbeiteter Satz"), "My edited line")
+        request = bot.translation_service.translate.call_args.args[0]
+        self.assertEqual(request.source_language, "German")
+        self.assertEqual(request.target_language, "English")
+        self.assertEqual(bot.translated_draft, "Mein bearbeiteter Satz")
+        self.assertEqual(bot.translated_draft_source, "My edited line")
+        self.assertEqual(bot.last_draft, "My edited line")
+
+    def test_editor_buttons_queue_visible_text(self):
+        app = Mock()
+        app.ai_draft_text.get.return_value = " My revised line "
+        app.translated_draft_text.get.return_value = " Mein Satz "
+        self.gui_method("_request_draft_variant")(app, "shorter")
+        app.bot.action_queue.put.assert_called_with(("revise_editor_draft", {
+            "language": "user", "seed": "My revised line", "mode": "shorter",
+        }))
+        self.gui_method("refine_game_draft")(app)
+        app.bot.action_queue.put.assert_called_with(("revise_editor_draft", {
+            "language": "game", "seed": "Mein Satz", "mode": "regenerate",
+            "user_source": "My revised line",
+        }))
+        self.gui_method("translate_game_draft")(app)
+        app.bot.action_queue.put.assert_called_with(("translate_game_draft", "Mein Satz"))
+
+    def test_candidate_selection_waits_for_explicit_translation(self):
+        app = Mock()
+        app.candidate_var.get.return_value = "Candidate 2"
+        app.bot.candidate_replies = ["First line", "Chosen line"]
+        self.gui_method("_select_candidate")(app)
+        app._replace_draft_text.assert_called_once_with(app.ai_draft_text, "Chosen line")
+        app.bot.action_queue.put.assert_not_called()
+        self.assertIn("Translate", app.bot.translation_status)
+
+    def test_generated_replacement_is_one_undo_step(self):
+        try:
+            root = tk.Tk()
+        except tk.TclError as exc:
+            self.skipTest(f"A desktop display is required: {exc}")
+        root.withdraw()
+        self.addCleanup(root.destroy)
+        editor = tk.Text(root, undo=True)
+        editor.insert("1.0", "My original wording")
+        self.gui_method("_replace_draft_text")(editor, "Generated wording")
+        editor.edit_undo()
+        self.assertEqual(editor.get("1.0", "end").strip(), "My original wording")
 
     def test_clear_all_removes_recovery_only_and_cancels_pending(self):
         recovery = DraftRecovery(Mock(settings={}), self.root)
