@@ -54,6 +54,7 @@ include = [
     "tests/test_ai_contracts.py",
     "tests/test_config_storage_contracts.py",
     "tests/test_conversation_contracts.py",
+    "tests/test_drafting.py",
     "tests/test_guardrails_usage.py",
     "tests/test_game_text.py",
     "tests/test_translation.py",

@@ -12,6 +12,8 @@ remain usable and existing character, campaign and memory data stay compatible.
 | `src/roleweaver/ai/` | Provider-independent AI contracts and built-in providers |
 | `src/roleweaver/guardrails/` | Replaceable dialogue-safety boundary and Guardrails AI adapter |
 | `src/roleweaver/translation/` | Language contracts, protected terminology and guarded batch translation |
+| `src/roleweaver/drafting.py` | Shared bilingual draft transitions, translation sequencing and editor revision |
+| `src/roleweaver/game_text.py` | Outgoing game-text punctuation normalization |
 | `src/roleweaver/config/` | Typed defaults, migration-aware settings loading and persistence |
 | `src/roleweaver/conversation/` | Chat event contract, NWN log parsing and resilient log following |
 | `src/roleweaver/games.py` | Game editions, log discovery and NWN2 normalization |
@@ -94,6 +96,24 @@ preserves compatibility while giving extensions a documented type to target.
 operating-system adapters are responsible only for locating logs and delivering
 keyboard/clipboard input.
 
+## Bilingual draft boundary
+
+Both bot entry points inherit `roleweaver.drafting.DraftWorkflowMixin`. It owns
+the transitions between the user-language and game-language drafts: forward and
+back translation, publishing draft versions, generation followed by translation,
+and refining the selected editor. The mixin does not perform game input or
+update Tk widgets. Its host supplies `settings`, `translation_service`,
+`generate_reply()`, `_protected_translation_terms()`, and draft/status/version
+fields initialized by the bot. This is an internal integration contract, not a
+standalone public API for third-party clients.
+
+The path is GUI action -> bot action queue -> shared draft workflow ->
+`TranslationService` or bot generation -> bot draft state -> GUI polling. The
+root and Linux bots retain provider-backed generation, incoming-chat handling,
+and platform input. The editable drafts remain under player control; only the
+explicit paste/send path reaches the game. Outgoing punctuation normalization
+is separate in `roleweaver.game_text`.
+
 ## Compatibility layer
 
 The root and Linux scripts remain runnable during migration. They re-export the
@@ -163,9 +183,10 @@ single large rewrite would be difficult to review and could break input,
 recovery or saved-data compatibility. Prefer these independently testable
 extractions, in order:
 
-1. Move shared session orchestration (chat events, generation requests, draft
-   state and translation sequencing) from mirrored bot methods into a core
-   service. Pass log, clipboard and game-input operations in as narrow ports.
+1. Continue the bounded session extraction. Bilingual draft transitions now
+   live in `roleweaver.drafting`; chat events, generation requests and broader
+   session state remain in the bot entry points. Extract those only behind
+   narrow log, clipboard and game-input ports with separate parity tests.
 2. Move repeated Tk panels and presentation state into a `roleweaver.desktop`
    package. Keep root and Linux entry points responsible for platform identity,
    keyboard bindings and launch lifecycle only.
@@ -175,5 +196,6 @@ extractions, in order:
 4. Delete each obsolete mirrored implementation only after both clients call
    the shared service and contract, Windows and native Linux tests pass.
 
-The first extraction should be one bounded workflow, not the entire bot. Keep
-the existing public names as compatibility wrappers while extensions migrate.
+Keep each extraction bounded rather than rewriting the entire bot. The draft
+method names are still available on `NWNAIBot` through inheritance, so existing
+callers do not need to change.

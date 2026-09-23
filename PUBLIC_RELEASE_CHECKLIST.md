@@ -32,6 +32,9 @@ Before tagging the next Role Weaver client release:
   show “up to date” until a newer stable release exists.
 - [ ] Test OpenAI, Gemini and LM Studio with currently supported models;
   confirm translation and guardrail/usage UI against real provider responses.
+- [ ] Test the two editable draft workflows: generate/refine in either language,
+  forward and back translation, Clear, Undo and explicit paste. Verify accented
+  input and apostrophes/punctuation in actual NWN chat on both platforms.
 - [ ] Check that Windows and Linux checksum manifests cover their respective
   published assets; inspect the final archives before publishing.
 

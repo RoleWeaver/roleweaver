@@ -34,11 +34,12 @@ request because it retains history and makes rebasing straightforward.
 | AI provider, structured result or usage | `src/roleweaver/ai/` | `tests/test_ai_contracts.py`, `tests/test_guardrails_usage.py` |
 | Guardrail policy or backend | `src/roleweaver/guardrails/` | `tests/test_guardrails_usage.py` |
 | Translation or protected terminology | `src/roleweaver/translation/` | `tests/test_translation.py` |
+| Bilingual draft generation, refinement or editor state | `src/roleweaver/drafting.py` | `tests/test_drafting.py`, both `test_client_fixes.py` suites |
 | Chat parsing or log following | `src/roleweaver/conversation/` | `tests/test_conversation_contracts.py` |
 | Settings or data location | `src/roleweaver/config/`, `src/roleweaver/paths.py` | `tests/test_config_storage_contracts.py` |
 | Backup, recovery or updater | `src/roleweaver/storage/`, `src/roleweaver/update_install.py`, `src/roleweaver/updates.py` | `tests/test_backup.py`, `tests/test_update_install.py`, `tests/test_updates.py` |
 | Desktop UI | `nwn_ai_gui.py`, `linux/nwn_ai_gui.py`, shared `src/roleweaver/update_ui.py` | Both test suites plus a manual desktop check |
-| Game keyboard/clipboard input | `nwn_ai_bot.py`, `linux/nwn_ai_bot.py`, Linux platform adapter | Both test suites and live-game checks |
+| Game keyboard/clipboard input | `nwn_ai_bot.py`, `linux/nwn_ai_bot.py`, `linux/linux_platform.py`; outgoing text normalization in `src/roleweaver/game_text.py` | Both test suites, `tests/test_game_text.py`, and live-game checks |
 
 Do not put new platform-neutral rules into just one bot or GUI file. Extract a
 small shared service, retain compatible entry points, and add tests for both

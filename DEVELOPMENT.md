@@ -79,15 +79,44 @@ Windows executable or Linux desktop installation.
 ## Module boundaries and next extractions
 
 `src/roleweaver/` owns contracts, parsing, settings, storage, translation,
-guardrails and update preparation shared by both clients. `update_ui.py` is a
-shared Tk widget, not platform-neutral business logic. The large root and
-`linux/` bot and GUI files still own session orchestration and OS input;
+draft transitions, guardrails and update preparation shared by both clients.
+`update_ui.py` is a shared Tk widget, not platform-neutral business logic. The
+large root and `linux/` bot and GUI files still own broader session
+orchestration and OS input;
 `ARCHITECTURE.md` maps the current boundaries and proposed small extractions.
 
 For a new feature, prefer a focused shared module with a typed input/output
 contract and synthetic tests. Keep game input and Tk callbacks thin. Migrate
 one behavior at a time so existing profiles, recovery files and keyboard
 workflows remain compatible.
+
+### Working on bilingual drafts
+
+Edit `src/roleweaver/drafting.py` for the shared forward/back translation,
+draft-version, and selected-editor revision workflow. Its host contract is
+documented in `ARCHITECTURE.md`; both `NWNAIBot` classes inherit it. Edit
+`src/roleweaver/translation/` for translation request/result behavior, and the
+root or Linux bot only for provider/session or platform-input behavior. GUI
+labels, button bindings and editor presentation stay in the respective GUI
+files. The shared workflow is internal: do not make a new platform depend on
+its mutable bot fields without an adapter.
+
+Run the synthetic workflow tests first, then both full suites above:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest tests.test_drafting -v
+.\.venv\Scripts\python.exe -m unittest tests.test_client_fixes -v
+Push-Location linux
+..\.venv\Scripts\python.exe -m unittest tests.test_client_fixes -v
+Pop-Location
+```
+
+On Ubuntu, use `.venv/bin/python` at the root and `../.venv/bin/python` from
+`linux/`. A Windows run of the Linux-layout tests is not a native Linux check.
+For a release, manually check both editors' Generate/Shorter/Longer/Clear
+actions, forward and back translation, F8/F9, explicit paste, and Undo on
+Windows and Ubuntu with disposable profiles. Keep real chat and keys out of
+fixtures and test reports.
 
 ## Adding a provider
 

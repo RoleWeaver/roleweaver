@@ -30,6 +30,8 @@ Features should preserve player/DM control rather than silently taking ownership
   using the commands in `DEVELOPMENT.md`.
 - If changing the GUI, verify all Tkinter button callbacks still resolve.
 - If changing NWN input behavior, test manual F9 paste as well as automatic sending.
+- If changing bilingual drafts, add synthetic coverage in `tests/test_drafting.py`
+  and check both editor directions and explicit paste in the desktop client.
 - Describe which behavior was tested on Windows and native Linux, and identify
   any platform you could not test.
 
