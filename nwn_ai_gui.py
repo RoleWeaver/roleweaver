@@ -772,6 +772,10 @@ class NWNAIApp:
             font=("Segoe UI", 10),
         )
         self.ai_draft_text.pack(fill="both", expand=True)
+        self.clear_user_draft_btn = ttk.Button(
+            user_draft_frame, text="Clear", command=self.clear_user_draft
+        )
+        self.clear_user_draft_btn.pack(anchor="e", pady=(5, 0))
         game_draft_buttons = ttk.Frame(game_draft_frame)
         game_draft_buttons.pack(fill="x", pady=(0, 5))
         self.refine_game_btn = ttk.Button(
@@ -791,12 +795,16 @@ class NWNAIApp:
             font=("Segoe UI", 10),
         )
         self.translated_draft_text.pack(fill="both", expand=True)
+        self.clear_game_draft_btn = ttk.Button(
+            game_draft_frame, text="Clear", command=self.clear_game_draft
+        )
+        self.clear_game_draft_btn.pack(anchor="e", pady=(5, 0))
 
         draft_buttons = ttk.Frame(draft_frame)
         draft_buttons.pack(fill="x", pady=(7, 0))
 
         self.clear_draft_btn = ttk.Button(
-            draft_buttons, text="Clear", command=self.clear_ai_draft, state="disabled"
+            draft_buttons, text="Clear Both", command=self.clear_ai_draft
         )
         self.clear_draft_btn.pack(side="right", padx=(6, 0))
         self.paste_draft_btn = ttk.Button(
@@ -3244,7 +3252,6 @@ class NWNAIApp:
             self.shorter_btn.configure(state="normal")
             self.longer_btn.configure(state="normal")
             self.paste_draft_btn.configure(state="normal")
-            self.clear_draft_btn.configure(state="normal")
             self.translate_draft_btn.configure(state="normal")
             self.refine_game_btn.configure(state="normal")
             self.backtranslate_btn.configure(state="normal")
@@ -3270,7 +3277,6 @@ class NWNAIApp:
             self.shorter_btn.configure(state="disabled")
             self.longer_btn.configure(state="disabled")
             self.paste_draft_btn.configure(state="disabled")
-            self.clear_draft_btn.configure(state="disabled")
             self.translate_draft_btn.configure(state="disabled")
             self.refine_game_btn.configure(state="disabled")
             self.backtranslate_btn.configure(state="disabled")
@@ -3930,17 +3936,31 @@ class NWNAIApp:
         self._append_log("[DRAFT] Be ready to click NWN during the 2-second countdown.")
         self.bot.action_queue.put(("paste_existing_draft", text))
 
-    def clear_ai_draft(self):
+    def clear_user_draft(self, announce=True):
         self._replace_draft_text(self.ai_draft_text, "")
-        self._replace_draft_text(self.translated_draft_text, "")
         if self.bot:
             self.bot.last_draft = ""
+            self.bot.translated_draft_source = ""
+            self.bot.last_draft_version += 1
+            self.last_seen_draft_version = self.bot.last_draft_version
+        if announce:
+            self._append_log("[DRAFT] Your-language draft cleared; game-language draft kept.")
+
+    def clear_game_draft(self, announce=True):
+        self._replace_draft_text(self.translated_draft_text, "")
+        if self.bot:
             self.bot.translated_draft = ""
             self.bot.translated_draft_source = ""
             self.bot.translated_draft_language = ""
-            self.bot.last_draft_version += 1
-            self.last_seen_draft_version = self.bot.last_draft_version
-        self._append_log("[DRAFT] Draft box cleared.")
+            self.bot.translated_draft_version += 1
+            self.last_seen_translated_draft_version = self.bot.translated_draft_version
+        if announce:
+            self._append_log("[DRAFT] Game-language draft cleared; your-language draft kept.")
+
+    def clear_ai_draft(self):
+        self.clear_user_draft(announce=False)
+        self.clear_game_draft(announce=False)
+        self._append_log("[DRAFT] Both drafts cleared.")
 
     def generate_draft(self):
         if self.bot:

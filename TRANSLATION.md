@@ -87,7 +87,9 @@ the current second editor text as its seed without regenerating from scratch.
 leaving its game-language text intact. F9 still creates and translates a new
 reply in one step. Before pasting, the player reviews the second editor; edits
 to the first editor require translating again. Ctrl+Z in either editor restores
-the previous text after a generated or translated replacement.
+the previous text after a generated or translated replacement. Each editor has
+its own **Clear** button, which leaves the other editor intact; **Clear Both**
+empties both drafts.
 
 For older NWN logs, the game language also selects the character encoding used
 when a line is not UTF-8. Spanish, German, French, Italian, and Dutch use

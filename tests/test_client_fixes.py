@@ -199,6 +199,27 @@ class ClientFixTests(unittest.TestCase):
         editor.edit_undo()
         self.assertEqual(editor.get("1.0", "end").strip(), "My original wording")
 
+    def test_each_clear_button_only_resets_its_own_draft(self):
+        self.assertIn('text="Clear", command=self.clear_user_draft', self.source)
+        self.assertIn('text="Clear", command=self.clear_game_draft', self.source)
+        app = Mock()
+        app.bot.last_draft_version = 2
+        app.bot.translated_draft_version = 4
+        app.bot.translated_draft = "Game line"
+        self.gui_method("clear_user_draft")(app)
+        app._replace_draft_text.assert_called_once_with(app.ai_draft_text, "")
+        self.assertEqual(app.bot.last_draft, "")
+        self.assertEqual(app.bot.translated_draft, "Game line")
+        self.assertEqual(app.bot.last_draft_version, 3)
+
+        app._replace_draft_text.reset_mock()
+        app.bot.last_draft = "My line"
+        self.gui_method("clear_game_draft")(app)
+        app._replace_draft_text.assert_called_once_with(app.translated_draft_text, "")
+        self.assertEqual(app.bot.last_draft, "My line")
+        self.assertEqual(app.bot.translated_draft, "")
+        self.assertEqual(app.bot.translated_draft_version, 5)
+
     def test_clear_all_removes_recovery_only_and_cancels_pending(self):
         recovery = DraftRecovery(Mock(settings={}), self.root)
         recovery.store.save("one", "old", {})
