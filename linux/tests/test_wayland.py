@@ -15,6 +15,12 @@ class WaylandTests(unittest.TestCase):
             self.assertEqual(run.call_args.kwargs['input'], '$(not-a-command)\nhello')
             self.assertNotIn('shell', run.call_args.kwargs)
 
+    def test_wayland_copy_normalizes_punctuation_before_game_paste(self):
+        with patch.dict(os.environ, {'WAYLAND_DISPLAY': 'wayland-0'}), patch.object(platform.shutil, 'which', return_value='/usr/bin/wl-copy'), patch.object(platform.subprocess, 'run') as run:
+            platform.copy_draft('I’ll stay—don’t worry… François')
+            self.assertEqual(run.call_args.kwargs['input'], "I'll stay-don't worry... François")
+            self.assertEqual(run.call_args.kwargs['encoding'], 'utf-8')
+
     def test_copy_never_claims_sent_and_never_injects_keys(self):
         with patch.dict(os.environ, {'WAYLAND_DISPLAY': 'wayland-0'}), patch.dict(sys.modules, {'pyperclip': types.ModuleType('pyperclip')}), patch.object(platform, 'copy_draft') as copy, patch.object(platform, '_xdotool') as x:
             self.assertFalse(platform.send_chat_to_nwn('Hello', {}))

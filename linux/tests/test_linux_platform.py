@@ -70,6 +70,10 @@ class SendTests(unittest.TestCase):
         self.clipboard.copy.assert_called_once_with('Hello "friend"')
         self.assertEqual([c.args[-1] for c in self.commands.call_args_list], ['Return', 'ctrl+v'])
 
+    def test_x11_paste_normalizes_punctuation_but_keeps_accents(self):
+        self.assertTrue(platform.send_chat_to_nwn('I’ll stay—don’t worry… François', self.settings, leave_unsent=True))
+        self.clipboard.copy.assert_called_once_with("I'll stay-don't worry... François")
+
     def test_send_submits_once_after_paste_and_maps_legacy_method(self):
         self.assertTrue(platform.send_chat_to_nwn('Hello', self.settings, force_method='scancode'))
         self.assertEqual([c.args[-1] for c in self.commands.call_args_list], ['Return', 'ctrl+v', 'Return'])

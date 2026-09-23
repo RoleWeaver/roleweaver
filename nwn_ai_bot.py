@@ -15,6 +15,7 @@ from roleweaver.conversation import (
 )
 from roleweaver.config import SettingsStore, default_settings, restore_guardrail_defaults
 from roleweaver.games import GAME_VERSIONS, default_game_log, discover_game_logs, switch_game
+from roleweaver.game_text import normalize_game_punctuation
 from roleweaver.paths import RuntimePaths
 from roleweaver.guardrails import (
     ACTION_VALUES,
@@ -581,20 +582,7 @@ def focus_nwn_window(title_contains):
 
 def send_chat_to_nwn(text, settings, leave_unsent=False, force_method=None):
     text = " ".join(text.replace("\r", " ").replace("\n", " ").split())
-
-    # Normalize common Unicode punctuation so NWN chat receives plain ASCII
-    # characters instead of smart punctuation that can display as '?'.
-    text = (
-        text
-        .replace("\u2018", "'")   # left single quotation mark
-        .replace("\u2019", "'")   # right single quotation mark / apostrophe
-        .replace("\u201c", '"')   # left double quotation mark
-        .replace("\u201d", '"')   # right double quotation mark
-        .replace("\u2013", "-")   # en dash
-        .replace("\u2014", "-")   # em dash
-        .replace("\u2026", "...") # ellipsis
-        .replace("\u00a0", " ")   # non-breaking space
-    )
+    text = normalize_game_punctuation(text)
     text = text[: int(settings["max_reply_characters"])].strip()
     if not text:
         return False

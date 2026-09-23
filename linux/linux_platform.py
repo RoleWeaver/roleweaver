@@ -8,6 +8,8 @@ import sys
 import threading
 import time
 
+from roleweaver.game_text import normalize_game_punctuation
+
 _send_lock = threading.Lock()
 
 
@@ -16,6 +18,7 @@ def is_wayland():
 
 
 def copy_draft(text):
+    text = normalize_game_punctuation(text)
     if is_wayland():
         if not shutil.which('wl-copy'):
             raise RuntimeError('Install wl-clipboard: sudo apt install wl-clipboard')
@@ -149,7 +152,7 @@ def send_chat_to_nwn(text, settings, leave_unsent=False, force_method=None):
     # Calls from the existing UI keep their original signature.
     import pyperclip
     text = ' '.join(str(text).split())
-    text = text.translate(str.maketrans({'‘': "'", '’': "'", '“': '"', '”': '"', '–': '-', '—': '-', '…': '...', '\u00a0': ' '}))
+    text = normalize_game_punctuation(text)
     text = text[:int(settings.get('max_reply_characters', 430))].strip()
     if not text:
         return False

@@ -96,3 +96,10 @@ when a line is not UTF-8. Spanish, German, French, Italian, and Dutch use
 Windows-1252; Polish uses Windows-1250; Russian uses Windows-1251. Changes to
 the game language apply to newly received lines during a running session.
 Mixed legacy encodings in one log cannot always be distinguished reliably.
+
+Before a draft is copied or pasted into NWN, Role Weaver converts typographic
+punctuation that some game chat inputs display as `?` (for example `I’ll` to
+`I'll`, and an em dash to `-`). This applies to Windows, Linux X11, and Linux
+Wayland/manual copy. Letters and accents in the selected language are not
+stripped. The editable draft itself keeps the original text; only the outgoing
+clipboard/game text is normalized.
