@@ -22,6 +22,7 @@ class UpdateTests(unittest.TestCase):
 
     def test_versions_and_asset_names(self):
         self.assertTrue(updates.is_newer("1.2.4", "1.2.3"))
+        self.assertTrue(updates.is_newer("1.3.1", "1.3.0"))
         self.assertFalse(updates.is_newer("1.2.3", "1.2.3"))
         self.assertEqual(updates.asset_name("1.2.4", "win32"), "RoleWeaver-Setup-v1.2.4.exe")
         self.assertEqual(
@@ -31,6 +32,29 @@ class UpdateTests(unittest.TestCase):
         self.assertEqual(updates.asset_name("1.2.4", "linux"), "RoleWeaver-v1.2.4-Linux.tar.gz")
         with self.assertRaises(updates.UpdateError):
             updates.is_newer("1.2.4-alpha", "1.2.3")
+
+    def test_v130_clients_can_find_v131_platform_downloads(self):
+        version = "1.3.1"
+        assets = {
+            name: f"https://github.com/RoleWeaver/roleweaver/releases/download/v{version}/{name}"
+            for name in (
+                updates.asset_name(version, "win32"),
+                updates.asset_name(version, "win32", portable=True),
+                updates.asset_name(version, "linux"),
+                "SHA256SUMS.txt",
+                "SHA256SUMS-Linux.txt",
+            )
+        }
+        release = updates.Release(
+            version,
+            f"https://github.com/RoleWeaver/roleweaver/releases/tag/v{version}",
+            "",
+            assets,
+        )
+        self.assertTrue(updates.is_newer(release.version, "1.3.0"))
+        self.assertTrue(updates.can_download(release, "win32"))
+        self.assertTrue(updates.can_download(release, "win32", portable=True))
+        self.assertTrue(updates.can_download(release, "linux"))
 
     def test_release_check_accepts_stable_github_assets_only(self):
         payload = {

@@ -1,4 +1,4 @@
-# Role Weaver 1.3.0 — First Run
+# Role Weaver 1.3.1 — First Run
 
 1. Install using [INSTALLATION.md](INSTALLATION.md).
 2. Enable game chat logging. For NWN2, follow [NWN2_LOGGING.md](NWN2_LOGGING.md)
@@ -23,4 +23,4 @@
 F6 pauses/resumes, F11 clears current context and F12 stops the client.
 On Linux Wayland, use on-screen controls and manual copy/paste; automatic AFK
 sending and global hotkeys are unavailable.
-See [TESTING_v1.3.0.md](TESTING_v1.3.0.md) for acceptance checks.
+See [TESTING_v1.3.1.md](TESTING_v1.3.1.md) for acceptance checks.

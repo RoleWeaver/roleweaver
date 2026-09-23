@@ -1,3 +1,10 @@
+## 1.3.1 — Draft workflow and game-text maintenance
+
+- Refine either editable draft in its own language and clear each editor independently.
+- Move shared bilingual draft transitions into the Python package for platform parity.
+- Normalize outgoing punctuation for NWN input while preserving the editable draft.
+- Refresh developer guidance and regression coverage for both clients.
+
 ## 1.3.0 — Translation, guardrails and updates
 
 - Add editable incoming/outgoing translation with Language Settings and

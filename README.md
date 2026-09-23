@@ -14,12 +14,13 @@ Multiplayer servers have different policies on AI-assisted tools and generated c
 
 Role Weaver also provides character memory, relationship tracking, profiles, and other features that remain useful without generated dialogue, but still ensure to follow server policies.
 
-## Version 1.3.0
+## Version 1.3.1
 
-Adds editable language translation, client guardrail policies and usage charts,
-and in-app update checks with verified downloads.
-[Download v1.3.0](https://github.com/RoleWeaver/roleweaver/releases/tag/v1.3.0).
-Read [release notes](RELEASE_NOTES_v1.3.0.md) and [NWN2 logging](NWN2_LOGGING.md).
+Improves the two editable draft workflows, normalizes punctuation sent to the
+game, and shares draft logic across Windows and Linux. It retains translation,
+guardrails, usage charts and in-app verified updates from v1.3.0.
+[Download v1.3.1](https://github.com/RoleWeaver/roleweaver/releases/tag/v1.3.1).
+Read [release notes](RELEASE_NOTES_v1.3.1.md) and [NWN2 logging](NWN2_LOGGING.md).
 
 - Windows source and launchers are at the repository root.
 - Linux source and launchers are in [linux/](linux/README.md), preserving X11 and Ubuntu Wayland support.
@@ -33,8 +34,8 @@ Read [release notes](RELEASE_NOTES_v1.3.0.md) and [NWN2 logging](NWN2_LOGGING.md
 ## Download for Windows
 
 Use the latest release on the Role Weaver GitHub Releases page. For most users,
-download **`RoleWeaver-Setup-v1.3.0.exe`**. A portable build,
-**`RoleWeaver-Portable-v1.3.0.zip`**, is also provided.
+download **`RoleWeaver-Setup-v1.3.1.exe`**. A portable build,
+**`RoleWeaver-Portable-v1.3.1.zip`**, is also provided.
 
 Python is not required for either packaged Windows build. Early unsigned releases may trigger Microsoft SmartScreen.
 
