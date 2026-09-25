@@ -107,6 +107,7 @@ jobs:
       - name: Verify matching source version
         run: |
           [[ "$GITHUB_REF_NAME" =~ ^mac-v$(cat VERSION)-preview[0-9]+$ ]]
+          cp macos/INSTALL_MACOS.md release/INSTALL_MACOS.md
       - name: Publish preview downloads
         uses: softprops/action-gh-release@v2
         with:
