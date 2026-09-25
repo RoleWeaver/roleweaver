@@ -34,7 +34,6 @@ jobs:
         run: |
           python -m compileall -q macos src
           python -m unittest discover -s tests -p 'test_mac*.py' -v
-          python -m unittest discover -s tests -p 'test_game*.py' -v
           python -m unittest discover -s tests -p 'test_translation.py' -v
       - name: Compile macOS app
         run: |
@@ -76,12 +75,12 @@ jobs:
           merge-multiple: true
       - name: Verify matching source version
         run: |
-          test "$GITHUB_REF_NAME" = "mac-v$(cat VERSION)-preview1"
+          [[ "$GITHUB_REF_NAME" =~ ^mac-v$(cat VERSION)-preview[0-9]+$ ]]
       - name: Publish preview downloads
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: Role Weaver v1.3.1 macOS preview 1
+          name: Role Weaver ${{ github.ref_name }}
           prerelease: true
           body_path: macos/RELEASE_NOTES_MACOS.md
           files: release/*

@@ -1,4 +1,4 @@
-# Role Weaver v1.3.1 macOS preview 1
+# Role Weaver v1.3.1 macOS preview
 
 This preview builds the Role Weaver 1.3.1 client as a native macOS app for Apple Silicon and Intel Macs. The app supports NWN log discovery, character profiles, AI drafts, translation, edit recovery, and backups.
 
