@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import platform as system_platform
 import re
 import tempfile
 import urllib.request
@@ -49,11 +50,18 @@ def asset_name(version: str, platform: str, *, portable: bool = False) -> str:
         return f"RoleWeaver-Setup-v{version}.exe"
     if platform == "linux":
         return f"RoleWeaver-v{version}-Linux.tar.gz"
+    if platform == "darwin":
+        arch = "arm64" if system_platform.machine() == "arm64" else "x86_64"
+        return f"RoleWeaver-v{version}-macOS-{arch}.zip"
     raise UpdateError(f"Updates are unavailable for platform {platform!r}.")
 
 
 def can_download(release: Release, platform: str, *, portable: bool = False) -> bool:
-    checksum = "SHA256SUMS-Linux.txt" if platform == "linux" else "SHA256SUMS.txt"
+    mac_arch = "arm64" if system_platform.machine() == "arm64" else "x86_64"
+    checksum = {
+        "linux": "SHA256SUMS-Linux.txt",
+        "darwin": f"SHA256SUMS-macOS-{mac_arch}.txt",
+    }.get(platform, "SHA256SUMS.txt")
     return (
         asset_name(release.version, platform, portable=portable) in release.assets
         and checksum in release.assets
@@ -118,6 +126,9 @@ def stage_release(
     checksum_url = release.assets.get("SHA256SUMS.txt")
     if platform == "linux":
         checksum_url = release.assets.get("SHA256SUMS-Linux.txt")
+    elif platform == "darwin":
+        arch = "arm64" if system_platform.machine() == "arm64" else "x86_64"
+        checksum_url = release.assets.get(f"SHA256SUMS-macOS-{arch}.txt")
     if not asset_url or not checksum_url:
         raise UpdateError("This release lacks the platform download or checksum file.")
     if not _github_url(asset_url) or not _github_url(checksum_url):

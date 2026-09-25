@@ -55,7 +55,7 @@ class UpdatePanel:
         self.prepare_button = ttk.Button(
             controls, text="Prepare New Folder", command=self.prepare, state="disabled"
         )
-        if not installed:
+        if not installed and platform != "darwin":
             self.prepare_button.pack(side="left")
         ttk.Button(
             controls, text="View Releases", command=lambda: webbrowser.open(RELEASES_URL)
@@ -65,7 +65,8 @@ class UpdatePanel:
             text=(
                 "Downloads are verified against SHA-256 checksums published with each release. "
                 "Windows installed builds can launch the updater after closing Role Weaver. "
-                "Portable and Linux builds can prepare a fresh folder with a copy of saved data."
+                "Portable and Linux builds can prepare a fresh folder with a copy of saved data. "
+                "On macOS, install the app from Finder. Saved data stays in Application Support."
             ),
             wraplength=650,
         ).pack(anchor="w", fill="x", pady=(14, 8))
@@ -179,6 +180,14 @@ class UpdatePanel:
                     ):
                         subprocess.Popen([str(result), "/CLOSEAPPLICATIONS"])
                         return
+                elif self.platform == "darwin":
+                    messagebox.showinfo(
+                        "Update ready",
+                        f"The verified macOS app is saved at:\n{result}\n\n"
+                        "Close Role Weaver, unzip it in Finder, then move "
+                        "RoleWeaver.app to Applications.",
+                        parent=self.root,
+                    )
                 else:
                     messagebox.showinfo(
                         "Update ready",
@@ -209,7 +218,12 @@ class UpdatePanel:
                 and not self.busy
             ):
                 self.download_button.configure(state="normal")
-            if self.staged_archive and not self.installed and not self.busy:
+            if (
+                self.staged_archive
+                and not self.installed
+                and self.platform != "darwin"
+                and not self.busy
+            ):
                 self.prepare_button.configure(state="normal")
         try:
             self.root.after(100, self._poll)

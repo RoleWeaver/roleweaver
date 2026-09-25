@@ -1,0 +1,3451 @@
+import os as _bootstrap_os
+import sys as _bootstrap_sys
+
+_bootstrap_root = _bootstrap_os.path.dirname(_bootstrap_os.path.dirname(__file__))
+_bootstrap_candidates = (
+    _bootstrap_os.path.join(_bootstrap_root, "src"),
+    _bootstrap_os.path.join(_bootstrap_os.path.dirname(__file__), "src"),
+)
+for _bootstrap_src in _bootstrap_candidates:
+    if _bootstrap_os.path.isdir(_bootstrap_src) and _bootstrap_src not in _bootstrap_sys.path:
+        _bootstrap_sys.path.insert(0, _bootstrap_src)
+        break
+
+from roleweaver.conversation import (
+    GENERIC_AREA_PATTERNS,
+    LogFollower,
+    clean_nwn_text,
+    detect_log_format,
+    parse_chat_line,
+    strip_chat_window_prefix as _strip_chat_window_prefix,
+)
+from roleweaver.config import SettingsStore, default_settings, restore_guardrail_defaults
+from roleweaver.games import GAME_VERSIONS, default_game_log, discover_game_logs, switch_game
+from roleweaver.drafting import DraftWorkflowMixin
+from roleweaver.paths import RuntimePaths
+from roleweaver.guardrails import (
+    ACTION_VALUES,
+    CATEGORY_LABELS,
+    DEFAULT_ACTIONS,
+    GuardrailsAIBackend,
+    validate_custom_patterns,
+)
+from roleweaver_afk import AFKMixin
+from mac_platform import migrate_default_log_paths
+import copy
+from roleweaver_pending import SummaryJournal
+import roleweaver_storage as storage
+import os
+import re
+import sys
+import time
+import json
+import queue
+import getpass
+import threading
+from collections import deque
+from datetime import datetime
+from pathlib import Path
+import uuid
+import difflib
+import shutil
+
+import pyperclip
+from mac_platform import is_wayland, copy_draft
+# Import the hotkey backend only when starting it on X11.
+from openai import OpenAI
+
+
+RUNTIME_PATHS = RuntimePaths.from_entrypoint(__file__)
+APP_DIR = RUNTIME_PATHS.root
+SETTINGS_PATH = RUNTIME_PATHS.settings
+CHARACTER_PROMPT_PATH = RUNTIME_PATHS.character_prompt
+
+from mac_platform import nwn_log_directories
+
+DEFAULT_NWN_LOG_DIR = nwn_log_directories()[0]
+DEFAULT_NWN_LOG_PATH = str(DEFAULT_NWN_LOG_DIR / "nwclientLog1.txt")
+
+# v1.2.2 intentionally ships without named persistent-world profiles. Worlds are
+# discovered locally from the player's own NWN logs and stored only in settings.
+SERVER_PROFILES = {
+    "AUTO": {"display_name": "Auto Detect", "default_log_path": DEFAULT_NWN_LOG_PATH},
+}
+
+DEFAULT_SETTINGS = default_settings(DEFAULT_NWN_LOG_PATH, keyboard_method="clipboard")
+
+
+def _safe_server_id(label):
+    text = re.sub(r"[^A-Za-z0-9_. -]+", "_", str(label or "World")).strip(" ._")
+    text = re.sub(r"\s+", "_", text)
+    return (text[:64] or "World")
+
+
+def server_display_name(settings, server_profile=None):
+    profile = server_profile or settings.get("server_profile", "AUTO")
+    if profile in SERVER_PROFILES:
+        return SERVER_PROFILES[profile]["display_name"]
+    discovered = settings.get("discovered_servers", {}) or {}
+    item = discovered.get(profile, {}) if isinstance(discovered, dict) else {}
+    return str(item.get("display_name") or profile or "Detected World")
+
+
+def discover_nwn_log_files(settings=None, max_files=20):
+    """Return likely NWN client logs, newest first, without contacting any server."""
+    if settings and settings.get("game_version", "nwn_ee") != "nwn_ee":
+        return discover_game_logs(settings, max_files)
+    candidates = []
+    seen = set()
+    configured = []
+    if settings:
+        configured.append(settings.get("log_path", ""))
+        configured.extend((settings.get("server_log_paths", {}) or {}).values())
+    for raw in configured:
+        if not raw:
+            continue
+        p = Path(raw).expanduser()
+        if p.is_file() and os.path.normcase(str(p)) not in seen:
+            seen.add(os.path.normcase(str(p)))
+            candidates.append(p)
+    for log_dir in nwn_log_directories():
+        for pattern in ("nwclientLog*.txt", "*.txt"):
+            for p in log_dir.glob(pattern):
+                key = os.path.normcase(str(p))
+                if p.is_file() and key not in seen:
+                    seen.add(key)
+                    candidates.append(p)
+    candidates.sort(key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True)
+    return candidates[:max_files]
+
+
+def _read_log_tail(path, max_bytes=300000):
+    """Read enough of a log for identity + format detection without loading huge files.
+
+    The beginning preserves login/welcome text while the tail preserves the current
+    area and recent chat format.
+    """
+    p = Path(path)
+    if not p.exists() or not p.is_file():
+        return ""
+    try:
+        size = p.stat().st_size
+        with p.open("rb") as f:
+            if size <= max_bytes * 2:
+                data = f.read()
+            else:
+                head = f.read(max_bytes)
+                f.seek(-max_bytes, os.SEEK_END)
+                f.readline()
+                tail = f.read()
+                data = head + b"\n" + tail
+        return data.decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+
+
+def detect_world_from_log(log_path):
+    """Infer a local display label and parser format from a log file.
+
+    Detection is deliberately generic: no public server-name database or bundled
+    persistent-world list is used. Explicit 'Welcome to ...' text wins; otherwise
+    an area-root label is used as a conservative fallback.
+    """
+    text = _read_log_tail(log_path)
+    if not text:
+        return None
+    lines = text.splitlines()
+    explicit = []
+    onboarding = []
+    area_roots = []
+    for index, line in enumerate(lines):
+        cleaned = clean_nwn_text(_strip_chat_window_prefix(line))
+        if not cleaned:
+            continue
+        m = re.search(r"\bWelcome\s+to\s+(.+?)(?:!|\.{2,}|$)", cleaned, re.IGNORECASE)
+        if m:
+            label = m.group(1).strip(" .!-\t")
+            label = re.sub(r"\s+-\s+https?://\S+.*$", "", label, flags=re.IGNORECASE).strip()
+            lower = cleaned.casefold()
+            systemish = (cleaned.casefold().startswith("welcome to ") or "journal has been updated. welcome" in lower)
+            if systemish and 2 <= len(label) <= 90:
+                explicit.append(label)
+            # Many PWs announce themselves through an onboarding NPC. The first
+            # such greeting near login is a useful generic signal; later tavern or
+            # shop greetings are deliberately ignored.
+            elif (
+                index < 350
+                and 2 <= len(label) <= 90
+                and '"' not in label
+                and ". " not in label
+                and ", " not in label
+            ):
+                onboarding.append(label)
+        for pattern in GENERIC_AREA_PATTERNS:
+            am = pattern.search(cleaned)
+            if am:
+                area = am.group("area").strip().rstrip(".")
+                root = re.split(r"\s*[:\-]\s*", area, maxsplit=1)[0].strip()
+                if root and len(root) <= 70:
+                    area_roots.append(root)
+                break
+    label = explicit[0] if explicit else (onboarding[0] if onboarding else (area_roots[-1] if area_roots else ""))
+    fmt = detect_log_format(text)
+    if not label:
+        # Keep identity local and useful without pretending we know the server name.
+        label = Path(log_path).stem or "Detected World"
+    sid = "WORLD_" + _safe_server_id(label)
+    return {
+        "id": sid,
+        "display_name": label,
+        "log_path": str(Path(log_path)),
+        "parser_profile": fmt,
+        "last_seen": datetime.now().isoformat(timespec="seconds"),
+    }
+
+
+def register_discovered_server(settings, detected):
+    if not detected:
+        return settings
+    discovered = dict(settings.get("discovered_servers", {}) or {})
+    sid = detected["id"]
+    existing = dict(discovered.get(sid, {}) or {})
+    existing.update(detected)
+    discovered[sid] = existing
+    settings["discovered_servers"] = discovered
+    paths = dict(settings.get("server_log_paths", {}) or {})
+    paths[sid] = detected["log_path"]
+    settings["server_log_paths"] = paths
+    return settings
+
+
+def refresh_discovered_servers(settings, max_files=20):
+    seen_worlds = set()
+    for path in discover_nwn_log_files(settings, max_files=max_files):
+        detected = detect_world_from_log(path)
+        if detected and detected["id"] not in seen_worlds:
+            register_discovered_server(settings, detected)
+            seen_worlds.add(detected["id"])
+    return settings
+
+
+def _settings_store():
+    return SettingsStore(
+        SETTINGS_PATH,
+        DEFAULT_SETTINGS,
+        known_profiles=SERVER_PROFILES,
+        migrate=migrate_default_log_paths,
+        resolve_log_path=get_server_log_path,
+    )
+
+
+def load_settings():
+    return _settings_store().load()
+
+
+def save_settings(settings):
+    _settings_store().save(settings)
+
+
+def get_server_log_path(settings, server_profile=None):
+    profile = server_profile or settings.get("server_profile", "AUTO")
+    # AUTO follows the newest available NWN client log.
+    if profile == "AUTO":
+        logs = discover_nwn_log_files(settings, max_files=1)
+        if logs:
+            return str(logs[0])
+    paths = settings.get("server_log_paths", {}) or {}
+    if paths.get(profile):
+        return paths[profile]
+    discovered = settings.get("discovered_servers", {}) or {}
+    if profile in discovered and discovered[profile].get("log_path"):
+        return discovered[profile]["log_path"]
+    return DEFAULT_NWN_LOG_PATH if settings.get("game_version", "nwn_ee") == "nwn_ee" else default_game_log(settings["game_version"])
+
+
+def load_character_prompt():
+    if not CHARACTER_PROMPT_PATH.exists():
+        storage.atomic_write_text(CHARACTER_PROMPT_PATH,
+            "You are roleplaying a character in Neverwinter Nights.\n"
+            "Stay in character and write only what the character says or emotes.\n",
+            encoding="utf-8",
+        )
+    return CHARACTER_PROMPT_PATH.read_text(encoding="utf-8").strip()
+
+
+ROLEPLAY_RULES_DIR = RUNTIME_PATHS.roleplay_rules
+
+
+def roleplay_rules_dir(server_profile="AUTO"):
+    profile = _safe_server_id(server_profile or "AUTO")
+    path = ROLEPLAY_RULES_DIR / profile
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def roleplay_rules_path(server_profile="AUTO"):
+    return roleplay_rules_dir(server_profile) / "roleplay_rules.txt"
+
+
+def load_server_roleplay_rules(server_profile="AUTO"):
+    path = roleplay_rules_path(server_profile)
+    try:
+        return path.read_text(encoding="utf-8", errors="replace").strip()
+    except Exception:
+        return ""
+
+
+# Desktop integration is isolated from character and memory logic.
+from mac_platform import (
+    find_window_handle, get_foreground_window_title, focus_nwn_window,
+    manual_focus_countdown, send_chat_to_nwn,
+)
+
+
+GUIDANCE_FILE = APP_DIR / "next_guidance.txt"
+RESPONSE_SEED_FILE = APP_DIR / "next_response_seed.txt"
+
+
+def read_shared_guidance():
+    """Read persistent guidance entered in the Guidance window or console."""
+    try:
+        if GUIDANCE_FILE.exists():
+            return GUIDANCE_FILE.read_text(encoding="utf-8").strip()
+    except Exception as exc:
+        print(f"[GUIDE] Could not read guidance file: {exc}")
+    return ""
+
+
+def write_shared_guidance(text):
+    """Store persistent guidance so both the GUI and bot console see the same value."""
+    try:
+        storage.atomic_write_text(GUIDANCE_FILE, (text or "").strip(), encoding="utf-8")
+        return True
+    except Exception as exc:
+        print(f"[GUIDE] Could not write guidance file: {exc}")
+        return False
+
+
+def clear_shared_guidance():
+    return write_shared_guidance("")
+
+
+def read_shared_response_seed():
+    """Read the player-authored wording to incorporate into reply generation."""
+    try:
+        if RESPONSE_SEED_FILE.exists():
+            return RESPONSE_SEED_FILE.read_text(encoding="utf-8").strip()
+    except Exception as exc:
+        print(f"[SEED] Could not read response seed file: {exc}")
+    return ""
+
+
+def write_shared_response_seed(text):
+    """Persist a response seed so GUI buttons and global hotkeys share it."""
+    try:
+        storage.atomic_write_text(
+            RESPONSE_SEED_FILE, (text or "").strip(), encoding="utf-8"
+        )
+        return True
+    except Exception as exc:
+        print(f"[SEED] Could not write response seed file: {exc}")
+        return False
+
+
+def clear_shared_response_seed():
+    return write_shared_response_seed("")
+
+
+
+CHARACTER_PROFILE_PATTERN = "character_*.txt"
+CHARACTERS_DIR = RUNTIME_PATHS.characters
+
+
+def character_profile_dir(server_profile="AUTO"):
+    profile = _safe_server_id(server_profile or "AUTO")
+    path = CHARACTERS_DIR / profile
+    path.mkdir(parents=True, exist_ok=True)
+
+    # Every newly discovered world starts with the two generic example profiles.
+    # They are local templates only and contain no persistent-world-specific data.
+    if profile != "AUTO":
+        examples = CHARACTERS_DIR / "AUTO"
+        if examples.exists():
+            for source in examples.glob("character_Example_*.txt"):
+                target = path / source.name
+                if not target.exists():
+                    try:
+                        storage.atomic_write_bytes(target, source.read_bytes())
+                    except Exception:
+                        pass
+    return path
+
+
+def list_character_profiles(server_profile="AUTO"):
+    """Return character prompts belonging to one server only."""
+    base = character_profile_dir(server_profile)
+    return sorted(
+        [p for p in base.glob(CHARACTER_PROFILE_PATTERN) if p.is_file()],
+        key=lambda p: p.name.casefold(),
+    )
+
+
+def resolve_character_profile(server_profile, filename):
+    return character_profile_dir(server_profile) / Path(filename).name
+
+
+def extract_character_name_from_prompt(text, fallback=""):
+    patterns = [
+        r"(?im)^\s*character\s+name\s*:\s*(.+?)\s*$",
+        r"(?im)^\s*name\s*:\s*(.+?)\s*$",
+    ]
+    for pattern in patterns:
+        m = re.search(pattern, text or "")
+        if m:
+            name = clean_nwn_text(m.group(1)).strip()
+            if name:
+                return name
+    return (fallback or "").strip()
+
+
+def extract_profile_type_from_prompt(text, fallback="Player"):
+    """Return normalized profile type: Player or NPC."""
+    m = re.search(r"(?im)^\s*profile\s+type\s*:\s*(.+?)\s*$", text or "")
+    raw = clean_nwn_text(m.group(1)).strip() if m else ""
+    key = raw.casefold()
+    if key in {"npc", "dm npc", "non-player", "non player", "non-player character"} or "npc" in key or "non-player" in key:
+        return "NPC"
+    if key in {"player", "pc", "player character"} or key.startswith("player"):
+        return "Player"
+    return "NPC" if str(fallback).strip().casefold() == "npc" else "Player"
+
+
+def character_profile_metadata(path):
+    """Lightweight metadata used by the DM Cast Manager."""
+    path = Path(path)
+    text, name = load_character_profile(path)
+    return {
+        "path": path,
+        "filename": path.name,
+        "name": name,
+        "profile_type": extract_profile_type_from_prompt(text),
+    }
+
+
+# Conservative title normalization used only for identity matching. Titles are
+# preserved for display; this simply lets "Reverend Mother Garcia Longhouse"
+# resolve to an existing "Garcia Longhouse" record when the match is unique.
+IDENTITY_TITLE_PREFIXES = (
+    "reverend mother", "revered mother", "reverend father", "revered father",
+    "high priestess", "high priest", "high sheriff", "grand master",
+    "archsufferer", "painbearer", "priestess", "priest", "sister", "brother",
+    "mother", "father", "captain", "commander", "chancellor", "minister",
+    "magistrate", "viceroy", "vizier", "lord", "lady", "sir", "dame",
+    "master", "mistress", "doctor", "dr", "professor", "prof",
+)
+
+def normalize_identity_name(name):
+    return re.sub(r"\s+", " ", clean_nwn_text(str(name or ""))).strip()
+
+def strip_identity_title(name):
+    clean = normalize_identity_name(name)
+    low = clean.casefold()
+    for title in sorted(IDENTITY_TITLE_PREFIXES, key=len, reverse=True):
+        prefix = title.casefold() + " "
+        if low.startswith(prefix):
+            remainder = clean[len(prefix):].strip()
+            # Require at least two words after stripping. This avoids turning
+            # ordinary one-word names into risky automatic matches.
+            if len(remainder.split()) >= 2:
+                return remainder
+    return clean
+
+MESSAGES_FOR_RE = re.compile(
+    r"^\s*Messages\s+for:\s*(?P<stamp>.+?)\s*$",
+    re.IGNORECASE,
+)
+
+JOINED_AS_PLAYER_RE = re.compile(
+    r"(?:^|\]\s*)(?P<name>[^\[\]]+?)\s+has joined as a player\.\.?\s*$",
+    re.IGNORECASE,
+)
+
+IDENTITY_STRUCTURED_CHAT_RE = re.compile(
+    r"^\[(?P<account>[^\]]+)\]\s*(?P<speaker>.+?):\s*\[(?P<channel>Talk|Whisper|Party|Tell|Shout|DM)\]\s*",
+    re.IGNORECASE,
+)
+
+_NWN_DATE_STAMP_RE = re.compile(
+    r"^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+"
+    r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\s+"
+    r"\d{1,2}\s+\d{1,2}:\d{2}:\d{2}\s+\d{4}$",
+    re.IGNORECASE,
+)
+
+
+def _clean_structured_speaker(value):
+    # Remove NWN color tags before identity comparison. clean_nwn_text handles
+    # escaped byte sequences; the tag removal below also covers literal tags.
+    text = clean_nwn_text(str(value or ""))
+    text = re.sub(r"<c[^>]*>|</c>", "", text, flags=re.IGNORECASE)
+    return normalize_identity_name(text)
+
+
+def _current_log_session(lines):
+    """Return only the newest NWN log session.
+
+    ``Messages for:`` is a timestamp in NWN client logs, not a character name.
+    The preceding divider/header is therefore used only as a session boundary.
+    """
+    header_index = -1
+    for i, line in enumerate(lines):
+        if MESSAGES_FOR_RE.match(clean_nwn_text(line).strip()):
+            header_index = i
+    if header_index >= 0:
+        return lines[header_index + 1:]
+    dividers = [i for i, line in enumerate(lines) if line.strip().startswith("--------------------------------")]
+    if dividers:
+        return lines[dividers[-1] + 1:]
+    return lines[-600:]
+
+
+def detect_recent_nwn_character(log_path):
+    """Best-effort, conservative detection of the active local NWN character.
+
+    NWN's ``Messages for:`` header contains a date/time stamp (for example
+    ``Sun Sep 6 17:02:32 2026``), so it must never be treated as a character
+    identity.
+
+    Strong path:
+      1. Treat the newest ``Messages for:`` header as the session boundary.
+      2. Find the local player/account join near the beginning of that session.
+      3. Resolve that account to the character name from structured chat lines
+         such as ``[Account] Character Name: [Talk] ...``.
+
+    Some persistent worlds do not expose a usable local join line. In that
+    case, use a deliberately conservative dominance heuristic: only accept a
+    speaker when they have at least three structured chat lines and clearly
+    outnumber the next-most-active speaker. Otherwise return an empty string
+    rather than displaying a false mismatch warning.
+    """
+    try:
+        path = Path(log_path)
+        if not path.exists():
+            return ""
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except Exception:
+        return ""
+
+    session = _current_log_session(lines)
+    if not session:
+        return ""
+
+    # Defensive guard against the alpha1.2 failure mode. A date/time value is
+    # never a valid character identity, even if a future parser path changes.
+    def safe_name(value):
+        name = normalize_identity_name(value)
+        if not name or _NWN_DATE_STAMP_RE.match(name):
+            return ""
+        return name
+
+    # Find an early local join. On many NWN servers the first join immediately
+    # after the session begins is the client's own account/player name. Keep
+    # this window intentionally small so a later remote player join is not
+    # mistaken for the local account.
+    local_account = ""
+    for line in session[:120]:
+        cleaned = clean_nwn_text(line).strip()
+        m = JOINED_AS_PLAYER_RE.search(cleaned)
+        if m:
+            local_account = safe_name(m.group("name"))
+            break
+
+    structured = []
+    for line in session:
+        cleaned = clean_nwn_text(line).strip()
+        m = IDENTITY_STRUCTURED_CHAT_RE.match(cleaned)
+        if not m:
+            continue
+        account = normalize_identity_name(m.group("account"))
+        speaker = safe_name(_clean_structured_speaker(m.group("speaker")))
+        if account and speaker:
+            structured.append((account, speaker))
+
+    if local_account and structured:
+        matches = [speaker for account, speaker in structured if account.casefold() == local_account.casefold()]
+        if matches:
+            # The most recent structured line from the local account is the
+            # best indication if a server permits character switching.
+            return matches[-1]
+
+    # Fallback for servers that do not expose a useful account join line.
+    # This works well for ordinary RP logs where the local player contributes
+    # repeatedly, but refuses to guess when the evidence is close/ambiguous.
+    if structured:
+        from collections import Counter
+        counts = Counter(speaker for _account, speaker in structured)
+        ranked = counts.most_common(2)
+        if ranked:
+            top_name, top_count = ranked[0]
+            second_count = ranked[1][1] if len(ranked) > 1 else 0
+            clear_lead = second_count == 0 or top_count >= max(3, int(second_count * 1.5 + 0.999))
+            if top_count >= 3 and clear_lead:
+                return top_name
+
+    return ""
+
+
+def load_character_profile(path):
+    path = Path(path)
+    text = path.read_text(encoding="utf-8", errors="replace")
+    fallback = path.stem
+    if fallback.lower().startswith("character_"):
+        fallback = fallback[len("character_"):]
+    fallback = fallback.replace("_", " ").strip()
+    name = extract_character_name_from_prompt(text, fallback=fallback)
+    return text, name
+
+
+def character_ai_settings_path(profile_path):
+    profile_path = Path(profile_path)
+    return profile_path.with_suffix(".settings.json")
+
+
+def load_character_ai_settings(profile_path):
+    path = character_ai_settings_path(profile_path)
+    defaults = {
+        "ai_provider": "Google Gemini",
+        "model": AI_PROVIDERS["Google Gemini"]["default_model"] if "AI_PROVIDERS" in globals() else "gemini-3.7-flash",
+        "lm_studio_base_url": "http://127.0.0.1:1234/v1",
+        "response_length_mode": "Auto",
+        "candidate_count": 3,
+    }
+    if not path.exists():
+        return defaults
+    try:
+        loaded=json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(loaded, dict): defaults.update(loaded)
+    except Exception:
+        pass
+    return defaults
+
+
+def save_character_ai_settings(profile_path, settings):
+    path=character_ai_settings_path(profile_path)
+    data={
+        "ai_provider": settings.get("ai_provider", "Google Gemini"),
+        "model": settings.get("model", ""),
+        "lm_studio_base_url": settings.get("lm_studio_base_url", "http://127.0.0.1:1234/v1"),
+        "response_length_mode": settings.get("response_length_mode", "Auto"),
+        "candidate_count": int(settings.get("candidate_count", 3)),
+    }
+    storage.atomic_write_text(path, json.dumps(data, indent=2), encoding="utf-8")
+
+
+
+from roleweaver.ai import (
+    AIExecutionService,
+    AI_PROVIDERS,
+    AIRequest,
+    AIRequestPurpose,
+    AIResult,
+    AIUsage,
+    GeminiProvider,
+    LMStudioProvider,
+    OpenAICompatibleProvider,
+    UsageStore,
+    coerce_ai_result,
+    create_ai_provider,
+    normalize_lm_studio_base_url,
+)
+from roleweaver.translation import (
+    TranslationDirection,
+    TranslationMessage,
+    TranslationRequest,
+    TranslationService,
+    language_choices,
+)
+
+CAMPAIGNS_DIR = RUNTIME_PATHS.campaigns
+
+def sanitize_campaign_id(value):
+    value = str(value or "default").strip()
+    value = re.sub(r'[^A-Za-z0-9_. -]+', '_', value).strip(' .')
+    return value or "default"
+
+def campaigns_server_dir(server_profile="AUTO"):
+    server = _safe_filename(server_profile) if "_safe_filename" in globals() else re.sub(r"[^A-Za-z0-9_. -]+", "_", str(server_profile))
+    path = CAMPAIGNS_DIR / server
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+def list_campaigns(server_profile="AUTO"):
+    base = campaigns_server_dir(server_profile)
+    result = []
+    for path in base.iterdir():
+        if not path.is_dir():
+            continue
+        meta = {"id": path.name, "name": path.name, "description": "", "created": "", "updated": ""}
+        mp = path / "campaign_metadata.json"
+        if mp.exists():
+            try:
+                loaded = json.loads(mp.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict): meta.update(loaded)
+            except Exception:
+                pass
+        # Alpha1 migration: a campaign_memory file alone still defines a valid campaign.
+        cm = path / "campaign_memory.json"
+        if cm.exists() and not mp.exists():
+            try:
+                loaded = json.loads(cm.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict) and loaded.get("name"):
+                    meta["name"] = str(loaded["name"])
+            except Exception:
+                pass
+        result.append(meta)
+    if not result:
+        create_campaign(server_profile, "default", "Default Campaign", "Migrated/default campaign")
+        return list_campaigns(server_profile)
+    return sorted(result, key=lambda x: str(x.get("name") or x.get("id")).casefold())
+
+def campaign_dir(settings, create=True):
+    server = settings.get("server_profile", "AUTO")
+    campaign = sanitize_campaign_id(settings.get("campaign_id", "default"))
+    path = campaigns_server_dir(server) / campaign
+    if create:
+        path.mkdir(parents=True, exist_ok=True)
+    return path
+
+def campaign_metadata_path(settings):
+    return campaign_dir(settings) / "campaign_metadata.json"
+
+def load_campaign_metadata(settings):
+    cid = sanitize_campaign_id(settings.get("campaign_id", "default"))
+    data = {"schema_version": 2, "id": cid, "name": cid, "description": "", "current_situation": "",
+            "server": settings.get("server_profile", "AUTO"), "created": "", "updated": ""}
+    path = campaign_metadata_path(settings)
+    if path.exists():
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict): data.update(loaded)
+        except Exception:
+            pass
+    return data
+
+@storage.synchronized
+def save_campaign_metadata(settings, data):
+    path = campaign_metadata_path(settings)
+    current = load_campaign_metadata(settings)
+    if isinstance(data, dict): current.update(data)
+    current["id"] = sanitize_campaign_id(settings.get("campaign_id", "default"))
+    current["server"] = settings.get("server_profile", "AUTO")
+    current["updated"] = datetime.now().isoformat(timespec="seconds")
+    current.setdefault("created", current["updated"])
+    storage.atomic_write_text(path, json.dumps(current, indent=2, ensure_ascii=False), encoding="utf-8")
+    return current
+
+@storage.synchronized
+def create_campaign(server_profile, campaign_id, name=None, description=""):
+    cid = sanitize_campaign_id(campaign_id)
+    settings = {"server_profile": server_profile, "campaign_id": cid}
+    path = campaign_dir(settings, create=False)
+    if path.exists() and any(path.iterdir()):
+        raise FileExistsError(f"Campaign '{cid}' already exists.")
+    path.mkdir(parents=True, exist_ok=True)
+    now = datetime.now().isoformat(timespec="seconds")
+    save_campaign_metadata(settings, {"name": name or cid, "description": description, "current_situation": "", "created": now})
+    save_campaign_memory(settings, {"shared_memory": "", "dm_notes": "", "facts": [], "npc_members": []})
+    return cid
+
+@storage.synchronized
+def rename_campaign(server_profile, old_id, new_id, new_name=None):
+    old_id = sanitize_campaign_id(old_id); new_id = sanitize_campaign_id(new_id)
+    base = campaigns_server_dir(server_profile)
+    src, dst = base / old_id, base / new_id
+    if not src.exists(): raise FileNotFoundError(f"Campaign '{old_id}' not found.")
+    if dst.exists() and dst != src: raise FileExistsError(f"Campaign '{new_id}' already exists.")
+    if dst != src: src.rename(dst)
+    settings={"server_profile":server_profile,"campaign_id":new_id}
+    meta=load_campaign_metadata(settings)
+    save_campaign_metadata(settings,{"name": new_name or meta.get("name") or new_id})
+    mem=load_campaign_memory(settings); save_campaign_memory(settings, mem)
+    return new_id
+
+@storage.synchronized
+def delete_campaign(server_profile, campaign_id):
+    import shutil
+    path = campaigns_server_dir(server_profile) / sanitize_campaign_id(campaign_id)
+    if path.exists(): shutil.rmtree(path)
+
+def campaign_memory_path(settings):
+    return campaign_dir(settings) / "campaign_memory.json"
+
+def load_campaign_memory(settings):
+    """Load server/campaign shared state. DM-only notes are never added to character prompts."""
+    data = {
+        "schema_version": 3,
+        "name": sanitize_campaign_id(settings.get("campaign_id", "default")),
+        "server": settings.get("server_profile", "AUTO"),
+        "shared_memory": "", "dm_notes": "", "facts": [],
+        "story_beats": [], "objectives": [], "locations": [],
+        "player_notes": [], "session_log": [],
+        # None means legacy alpha1 campaign: treat every NPC profile as a member
+        # until the user explicitly changes membership.
+        "npc_members": None,
+        "updated": "",
+    }
+    path = campaign_memory_path(settings)
+    if path.exists():
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict): data.update(loaded)
+        except Exception:
+            pass
+    if not isinstance(data.get("facts"), list): data["facts"] = []
+    for key in ("story_beats", "objectives", "locations", "player_notes", "session_log"):
+        if not isinstance(data.get(key), list): data[key] = []
+    if data.get("npc_members") is not None and not isinstance(data.get("npc_members"), list): data["npc_members"] = []
+    return data
+
+@storage.synchronized
+def save_campaign_memory(settings, data):
+    path = campaign_memory_path(settings)
+    current = load_campaign_memory(settings)
+    if isinstance(data, dict): current.update(data)
+    current["schema_version"] = 3
+    current["server"] = settings.get("server_profile", "AUTO")
+    current["name"] = sanitize_campaign_id(settings.get("campaign_id", "default"))
+    current["updated"] = datetime.now().isoformat(timespec="seconds")
+    storage.atomic_write_text(path, json.dumps(current, indent=2, ensure_ascii=False), encoding="utf-8")
+    # Ensure metadata exists for alpha1 migrations.
+    try:
+        mp = campaign_dir(settings) / "campaign_metadata.json"
+        if not mp.exists():
+            save_campaign_metadata(settings, {"name": current["name"], "created": current["updated"]})
+    except Exception:
+        pass
+    return current
+
+
+ROLEWEAVER_DATA_DIR = APP_DIR / "RoleWeaver_Data"
+
+
+def _safe_filename(value):
+    value = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", str(value or "").strip())
+    value = re.sub(r"\s+", " ", value).strip(" .")
+    return value or "Unknown"
+
+
+def _memory_paths(settings):
+    server = _safe_filename(settings.get("server_profile", "AUTO"))
+    character = _safe_filename(settings.get("character_name", "Unknown"))
+    base = ROLEWEAVER_DATA_DIR / server / character
+    summaries = base / "session_summaries"
+    return base, base / "character_memory.json", base / "running_summary.txt", summaries
+
+
+def _history_dir(settings):
+    base, _, _, _ = _memory_paths(settings)
+    path = base / "conversation_history"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def list_history_files(settings):
+    return sorted(_history_dir(settings).glob("*.txt"), key=lambda p: p.name, reverse=True)
+
+
+def read_history_file(path):
+    return Path(path).read_text(encoding="utf-8", errors="replace")
+
+
+def load_persistent_memory(settings):
+    base, memory_path, summary_path, summaries = _memory_paths(settings)
+    base.mkdir(parents=True, exist_ok=True)
+    summaries.mkdir(parents=True, exist_ok=True)
+
+    data = {
+        "server": settings.get("server_profile", "AUTO"),
+        "player_character": settings.get("character_name", "Unknown"),
+        "characters": {},
+    }
+    if memory_path.exists():
+        try:
+            loaded = json.loads(memory_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                data.update(loaded)
+                if not isinstance(data.get("characters"), dict):
+                    data["characters"] = {}
+        except Exception:
+            pass
+
+    # v1.1 memory schema. Existing v1.0 memory files are upgraded in place
+    # without discarding their notes or relationship fields.
+    if not isinstance(data.get("learned_voice"), dict):
+        data["learned_voice"] = {}
+    if not isinstance(data.get("voice_examples"), list):
+        data["voice_examples"] = []
+    if not isinstance(data.get("story_threads"), list):
+        data["story_threads"] = []
+    if not isinstance(data.get("identity_aliases"), dict):
+        data["identity_aliases"] = {}
+    # v1.2 alpha2 character-intelligence schema. These fields are deliberately
+    # additive so older character_memory.json files upgrade without data loss.
+    if not isinstance(data.get("emotional_state"), dict):
+        data["emotional_state"] = {}
+    if not isinstance(data.get("character_knowledge"), list):
+        data["character_knowledge"] = []
+    # v1.2 alpha4 continuity schema. Stable records support years of bounded,
+    # relevant continuity without placing the full history in every prompt.
+    if not isinstance(data.get("continuity_events"), list):
+        data["continuity_events"] = []
+    if not isinstance(data.get("commitments"), list):
+        data["commitments"] = []
+    # v1.2 alpha5 Adaptive Characters. Corrections are learned only from an
+    # AI draft that the player actually sends in edited form. Character development
+    # remains pending until explicitly approved by the player.
+    if not isinstance(data.get("correction_examples"), list):
+        data["correction_examples"] = []
+    if not isinstance(data.get("correction_preferences"), dict):
+        data["correction_preferences"] = {}
+    if not isinstance(data.get("development_proposals"), list):
+        data["development_proposals"] = []
+    if not isinstance(data.get("approved_development"), list):
+        data["approved_development"] = []
+    if not isinstance(data.get("rejected_development"), list):
+        data["rejected_development"] = []
+    # v1.2 alpha6 DM Continuity: important information this character has already
+    # revealed to particular players. This is character-owned continuity; it never
+    # writes to or modifies another player character's memory.
+    if not isinstance(data.get("shared_with_players"), dict):
+        data["shared_with_players"] = {}
+    for name, entry in list(data.get("characters", {}).items()):
+        if not isinstance(entry, dict):
+            entry = {"notes": str(entry or "").strip()}
+            data["characters"][name] = entry
+        if not isinstance(entry.get("interaction_history"), list):
+            entry["interaction_history"] = []
+        entry.setdefault("interaction_count", len(entry["interaction_history"]))
+
+    summary = ""
+    if summary_path.exists():
+        try:
+            summary = summary_path.read_text(encoding="utf-8", errors="replace").strip()
+        except Exception:
+            pass
+
+    summary = str(data.get("_running_summary", summary))
+    return data, summary
+
+
+@storage.synchronized
+def save_persistent_memory(settings, data, running_summary):
+    base, memory_path, summary_path, summaries = _memory_paths(settings)
+    base.mkdir(parents=True, exist_ok=True)
+    summaries.mkdir(parents=True, exist_ok=True)
+    data["_running_summary"] = (running_summary or "").strip()
+    storage.atomic_write_text(memory_path, json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    try:
+        storage.atomic_write_text(summary_path, data["_running_summary"], encoding="utf-8")
+    except Exception as exc:
+        print(f"[MEMORY] Summary text cache could not be updated: {exc}. The JSON memory contains the saved summary.")
+
+
+def archive_session_summary(settings, summary):
+    if not summary or not summary.strip():
+        return
+    _, _, _, summaries = _memory_paths(settings)
+    summaries.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    path = summaries / f"{stamp}.txt"
+    storage.atomic_write_text(path, summary.strip(), encoding="utf-8")
+
+
+def extract_json_object(text):
+    text = (text or "").strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s*```$", "", text)
+    start = text.find("{")
+    end = text.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        return json.loads(text[start:end + 1])
+    except Exception:
+        return None
+
+
+
+LORE_DIR = RUNTIME_PATHS.lore
+
+
+def lore_dir(server_profile="AUTO"):
+    """Return the lore folder belonging only to the selected local world profile."""
+    profile = _safe_server_id(server_profile or "AUTO")
+    path = LORE_DIR / profile
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def list_lore_files(server_profile="AUTO"):
+    return sorted(
+        [p for p in lore_dir(server_profile).glob("*.txt") if p.is_file()],
+        key=lambda p: p.name.casefold(),
+    )
+
+
+def resolve_lore_file(server_profile, filename):
+    return lore_dir(server_profile) / Path(filename).name
+
+
+def load_relevant_lore(context_text, server_profile="AUTO", max_files=3, max_characters=5000):
+    """Return relevant lore from the currently selected server only."""
+    try:
+        files = list_lore_files(server_profile)
+    except Exception:
+        return []
+    if not files:
+        return []
+
+    haystack = (context_text or "").casefold()
+    words = set(re.findall(r"[a-zA-Z0-9_'’-]{4,}", haystack))
+    ranked = []
+
+    for path in files:
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace").strip()
+        except Exception:
+            continue
+        if not text:
+            continue
+
+        stem_words = set(re.findall(r"[a-zA-Z0-9_'’-]{3,}", path.stem.casefold()))
+        body_words = set(re.findall(r"[a-zA-Z0-9_'’-]{5,}", text.casefold()))
+        score = 0
+
+        # Files prefixed with always_ are always included, but only for this server.
+        if path.stem.casefold().startswith("always_"):
+            score += 1000
+
+        score += 12 * len(stem_words & words)
+        score += min(20, len(body_words & words))
+
+        if score > 0:
+            ranked.append((score, path.name, text))
+
+    ranked.sort(key=lambda item: (-item[0], item[1].casefold()))
+
+    result = []
+    used = 0
+    for score, name, text in ranked[:max_files]:
+        remaining = max_characters - used
+        if remaining <= 0:
+            break
+        excerpt = text[:remaining].strip()
+        if excerpt:
+            result.append((name, excerpt))
+            used += len(excerpt)
+    return result
+
+
+
+OOC_PREFIX_RE = re.compile(
+    r"^\s*(?:\(\(|//|ooc\s*:|out\s+of\s+character\s*:|afk\s*:)",
+    re.IGNORECASE,
+)
+
+OOC_SUFFIX_RE = re.compile(r"\)\)\s*$")
+
+
+def classify_ic_ooc(message):
+    """Return 'OOC' for common explicit OOC conventions, otherwise 'IC'."""
+    text = (message or "").strip()
+    if not text:
+        return "IC"
+    if OOC_PREFIX_RE.search(text):
+        return "OOC"
+    if text.startswith("(") and text.endswith(")") and len(text) > 2:
+        # A single parenthetical line is treated as OOC; ordinary emotes are
+        # normally written with asterisks in NWN RP.
+        return "OOC"
+    if OOC_SUFFIX_RE.search(text) and text.startswith("(("):
+        return "OOC"
+    return "IC"
+
+
+RELATIONSHIP_GENERIC_ENTITY_WORDS = {
+    "children", "people", "citizens", "refugees", "slaves", "workers", "families",
+    "guards", "soldiers", "priests", "clergy", "poor", "sick", "wounded", "dead",
+    "missing", "suffering", "victims", "survivors", "residents", "commoners", "crowd",
+    "year", "years", "slums", "district", "city", "village", "town", "temple", "church",
+    "orphanage", "inn", "tavern", "docks", "warehouse", "event", "war", "plague",
+}
+
+
+def is_likely_relationship_character(name, confirmed_names=()):
+    """Conservative gate for LLM-created relationship entities.
+
+    Actual parsed speakers and existing/confirmed identities are always accepted.
+    Unconfirmed references must look like a proper individual name, not a group,
+    place, event, condition, or descriptive noun phrase.
+    """
+    clean = normalize_identity_name(name)
+    if not clean or len(clean) > 80:
+        return False
+    folded = clean.casefold()
+    confirmed = {normalize_identity_name(x).casefold() for x in confirmed_names if normalize_identity_name(x)}
+    if folded in confirmed:
+        return True
+    words = re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ'’-]+", clean)
+    if not words or len(words) > 5:
+        return False
+    low = [w.casefold().strip("'’-.") for w in words]
+    if low[0] in {"the", "a", "an", "some", "those", "these", "our", "their"}:
+        return False
+    if any(w in RELATIONSHIP_GENERIC_ENTITY_WORDS for w in low):
+        return False
+    # A new, unconfirmed entity must resemble a proper individual name. This
+    # deliberately rejects prose such as "people suffering in the slums" while
+    # allowing fantasy names and titled names such as "Mother Galeria Bharcal".
+    significant = [w for w in words if w.casefold() not in {"of", "the", "de", "von", "van"}]
+    if not significant:
+        return False
+    if not all((w[:1].isupper() or not w[:1].isalpha()) for w in significant):
+        return False
+    return True
+
+
+class NWNAIBot(DraftWorkflowMixin, AFKMixin):
+    def __init__(self, settings, character_prompt, client):
+        self.settings = settings
+        self.character_prompt = character_prompt
+        self.client = client
+        self.usage_store = UsageStore(APP_DIR / "RoleWeaver_Data" / "usage.sqlite3")
+        self.ai_execution = AIExecutionService(client, settings, self.usage_store)
+        self.translation_service = TranslationService(self.ai_execution)
+
+        self.stop_event = threading.Event()
+        self.paused = bool(settings.get("start_paused", False))
+        self.auto_reply = bool(settings.get("auto_reply_on_start", False)) and not is_wayland()
+
+        self.context = deque(maxlen=int(settings["context_messages"]))
+        self.current_area = ""
+        self.last_external_event = None
+        self.last_auto_reply_at = 0.0
+        self.pending_auto_token = 0
+        self.init_afk()
+        self.next_guidance = ""
+
+        # Separate private Tell threads from public chat so unrelated tells do
+        # not contaminate one another.
+        self.tell_contexts = {}
+        self.last_tell_partner = ""
+
+        # Manual context controls.
+        self.ignored_context_ids = set()
+        self.pinned_context_ids = set()
+        self._next_context_id = 1
+
+        # Generation timing shown by the GUI.
+        self.last_generation_seconds = 0.0
+        self.last_generation_model = ""
+        self.last_generation_timestamp = 0.0
+
+        self.request_lock = threading.Lock()
+        self.action_queue = queue.Queue()
+
+        # Persistent RP memory and rolling session summary.
+        self.memory_data, self.running_summary = load_persistent_memory(settings)
+        self.summary_journal = SummaryJournal(_memory_paths(settings)[0] / "pending_summaries.json")
+        self.summary_event_buffer = self.summary_journal.events()
+        self._summary_lock = self.summary_journal.processing_lock
+        self.summary_in_progress = False
+
+        # Characters encountered during the current run are tracked separately
+        # from durable memory. This lets the Relationships tab populate
+        # immediately, before the periodic LLM memory summarizer has run.
+        self.encountered_characters = set(
+            str(name).strip()
+            for name in self.memory_data.get("characters", {}).keys()
+            if str(name).strip()
+        )
+
+        # Draft state is polled by the GUI.
+        self.last_draft = ""
+        self.last_draft_version = 0
+        # Pending correction candidate is deliberately session-only. It is paired
+        # with the next sufficiently-similar self line that actually reaches NWN.
+        self.pending_correction_draft = None
+        self.candidate_replies = []
+        self.candidate_version = 0
+
+        # One plain-text transcript per Role Weaver run.
+        history_dir = _history_dir(settings)
+        stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        self.history_path = history_dir / f"{stamp}.txt"
+        storage.atomic_write_text(self.history_path,
+            f"Role Weaver conversation history\nServer: {server_display_name(settings)}\n"
+            f"Character: {settings.get('character_name','Unknown')}\nStarted: {datetime.now().isoformat(timespec='seconds')}\n\n",
+            encoding="utf-8",
+        )
+
+        # Exact content from the most recent reply-generation request.
+        self.last_ai_context_display = ""
+        self.last_ai_context_version = 0
+
+        # The complete normalized result from the newest AI request. Keeping
+        # provider metadata here enables usage reporting without coupling the
+        # conversation engine to an individual SDK.
+        self.last_ai_result = None
+
+        self.translated_chat = []
+        self.translated_chat_version = 0
+        self.last_translated_context_id = 0
+        self.translated_draft = ""
+        self.translated_draft_source = ""
+        self.translated_draft_language = ""
+        self.translated_draft_version = 0
+        self.translation_status = "Ready"
+
+    def request_ai(self, instructions, prompt, purpose=AIRequestPurpose.REPLY):
+        """Run one provider-neutral request and return a structured result."""
+        if not isinstance(purpose, AIRequestPurpose):
+            purpose = AIRequestPurpose(purpose)
+        request = AIRequest(
+            instructions=instructions,
+            prompt=prompt,
+            purpose=purpose,
+        )
+        result = self.ai_execution.generate(request)
+        self.last_ai_result = result
+        return result
+
+    @storage.synchronized
+    def add_system_event(self, line):
+        if self.settings.get("game_version", "nwn_ee").startswith("nwn2") and line.startswith("Loading Area:"):
+            self.current_area = line.partition(":")[2].strip().rstrip(".")
+            return
+        if not line.startswith("[CHAT WINDOW TEXT]"):
+            return
+        cleaned = clean_nwn_text(_strip_chat_window_prefix(line))
+        area = ""
+        for pattern in GENERIC_AREA_PATTERNS:
+            m = pattern.search(cleaned)
+            if m:
+                area = clean_nwn_text(m.group("area")).rstrip(".")
+                break
+        if area and area != self.current_area:
+            self.current_area = area
+            print(f"[AREA] {area}")
+
+    @storage.synchronized
+    def add_chat_event(self, event):
+        event = dict(event)
+        event.setdefault("_context_id", self._next_context_id)
+        self._next_context_id += 1
+        event.setdefault("_mode", classify_ic_ooc(event.get("message", "")))
+        if self.settings.get("memory_enabled", True) and event["_mode"] == "IC":
+            self.summary_journal.append(event)
+            self.summary_event_buffer = self.summary_journal.events()
+
+        self.context.append(event)
+
+        # Make non-self speakers immediately available in the Relationships
+        # tab. This is intentionally independent of the periodic summarizer:
+        # the user can record a relationship after the first exchange.
+        if not event.get("self"):
+            speaker = str(event.get("speaker") or "").strip()
+            if speaker:
+                canonical = self.resolve_character_identity(speaker, create_alias=True)
+                existing = None
+                for known in self.encountered_characters:
+                    if normalize_identity_name(known).casefold() == normalize_identity_name(canonical).casefold():
+                        existing = known; break
+                if existing is None:
+                    self.encountered_characters.add(canonical)
+
+        # Tells get a separate thread keyed by the other participant.
+        if event.get("channel") == "Tell":
+            partner = event.get("speaker", "")
+            if event.get("self"):
+                partner = event.get("recipient") or self.last_tell_partner or "Tell"
+            else:
+                self.last_tell_partner = partner
+            key = (partner or "Tell").casefold()
+            dq = self.tell_contexts.setdefault(
+                key,
+                deque(maxlen=int(self.settings.get("tell_context_messages", 20))),
+            )
+            dq.append(event)
+
+        who = "YOU" if event["self"] else event["speaker"]
+        print(
+            f"[{event['channel']}/{event.get('_mode', 'IC')}] "
+            f"{who}: {event['message']}"
+        )
+        try:
+            now = datetime.now().strftime("%H:%M:%S")
+            storage.append_text(self.history_path, f"[{now}] [{event['channel']}] {who}: {event['message']}\n")
+        except Exception as exc:
+            print(f"[HISTORY ERROR] {exc}")
+
+        if self.settings.get("memory_enabled", True) and event.get("_mode") == "IC":
+            # Only actual IC lines that reached the NWN log are allowed to teach
+            # long-term memory or character voice. This naturally includes
+            # manually written lines and player-edited AI drafts, while excluding
+            # suggestions that were never sent.
+            if event.get("self"):
+                self._capture_player_correction(str(event.get("message") or ""))
+
+            if event.get("self") and self.settings.get("learned_voice_enabled", True):
+                examples = self.memory_data.setdefault("voice_examples", [])
+                examples.append({
+                    "timestamp": datetime.now().isoformat(timespec="seconds"),
+                    "channel": event.get("channel", "Talk"),
+                    "message": str(event.get("message") or "").strip(),
+                })
+                sample_limit = max(20, int(self.settings.get("learned_voice_sample_limit", 80)))
+                del examples[:-sample_limit]
+
+            interval = max(6, int(self.settings.get("summary_interval_messages", 18)))
+            if len(self.summary_event_buffer) >= interval and not self.summary_in_progress:
+                threading.Thread(
+                    target=self._summarize_and_remember,
+                    daemon=True,
+                ).start()
+
+        if event["self"]:
+            return
+
+        if self.settings.get("translation_continuous", False):
+            self.action_queue.put(("translate_chat", "new"))
+
+        self.last_external_event = event
+        self.observe_afk(event)
+
+        if self.paused or self.afk or not self.auto_reply:
+            return
+
+        if event["channel"] not in self.settings["auto_reply_channels"]:
+            return
+
+        # Delay auto reply so several consecutive lines can arrive and be answered together.
+        self.pending_auto_token += 1
+        token = self.pending_auto_token
+        delay = float(self.settings["auto_reply_delay_seconds"])
+
+        def delayed():
+            time.sleep(delay)
+            if self.stop_event.is_set():
+                return
+            if token != self.pending_auto_token:
+                return
+            cooldown = float(self.settings["auto_reply_cooldown_seconds"])
+            if time.time() - self.last_auto_reply_at < cooldown:
+                return
+            self.action_queue.put(("generate_and_send", "auto"))
+
+        threading.Thread(target=delayed, daemon=True).start()
+
+    def relationship_character_names(self):
+        """Canonical names available in the Relationships tab."""
+        names = {}
+        for name in self.memory_data.get("characters", {}).keys():
+            clean = normalize_identity_name(name)
+            if clean:
+                names.setdefault(clean.casefold(), clean)
+        for name in self.encountered_characters:
+            canonical = self.resolve_character_identity(name, create_alias=False)
+            clean = normalize_identity_name(canonical or name)
+            if clean:
+                names.setdefault(clean.casefold(), clean)
+        return sorted(names.values(), key=str.casefold)
+
+    def _identity_alias_map(self):
+        aliases = self.memory_data.setdefault("identity_aliases", {})
+        if not isinstance(aliases, dict):
+            aliases = {}; self.memory_data["identity_aliases"] = aliases
+        return aliases
+
+    def aliases_for_character(self, canonical):
+        aliases = self._identity_alias_map().get(str(canonical), [])
+        return [normalize_identity_name(x) for x in aliases if normalize_identity_name(x)] if isinstance(aliases, list) else []
+
+    @storage.synchronized
+    def resolve_character_identity(self, name, create_alias=True):
+        """Resolve exact names, saved aliases, and conservative titled-name variants."""
+        name = normalize_identity_name(name)
+        if not name: return ""
+        store = self.memory_data.get("characters", {})
+        for stored_name in store:
+            if normalize_identity_name(stored_name).casefold() == name.casefold():
+                return stored_name
+        for canonical, aliases in self._identity_alias_map().items():
+            for alias in aliases if isinstance(aliases, list) else []:
+                if normalize_identity_name(alias).casefold() == name.casefold():
+                    return canonical
+        stripped = strip_identity_title(name)
+        candidates=[]
+        for stored_name in store:
+            stored_clean=normalize_identity_name(stored_name)
+            if strip_identity_title(stored_clean).casefold() == stripped.casefold():
+                candidates.append(stored_name)
+        if len(candidates)==1:
+            canonical=candidates[0]
+            if create_alias and name.casefold()!=normalize_identity_name(canonical).casefold():
+                self.add_character_alias(canonical, name, save=False)
+            return canonical
+        return name
+
+    @storage.synchronized
+    def add_character_alias(self, canonical, alias, save=True):
+        canonical = self.resolve_character_identity(canonical, create_alias=False)
+        alias = normalize_identity_name(alias)
+        if not canonical or not alias or alias.casefold()==normalize_identity_name(canonical).casefold(): return False
+        aliases=self._identity_alias_map().setdefault(canonical, [])
+        if not any(normalize_identity_name(x).casefold()==alias.casefold() for x in aliases):
+            aliases.append(alias)
+        if save: save_persistent_memory(self.settings, self.memory_data, self.running_summary)
+        return True
+
+    @storage.synchronized
+    def merge_character_records(self, source_name, target_name):
+        source_key, source = self._find_character_record(source_name)
+        target_key, target = self._find_character_record(target_name)
+        if not source_key or not target_key or source_key.casefold()==target_key.casefold(): return False
+        if not isinstance(source, dict): source={"notes":str(source or "")}
+        if not isinstance(target, dict): target={"notes":str(target or "")}
+        # Preserve both human notes/relationships without silently discarding text.
+        for field in ("notes","relationship"):
+            a=str(target.get(field) or "").strip(); b=str(source.get(field) or "").strip()
+            if b and b not in a: target[field] = (a + ("\n\n" if a else "") + b).strip()
+        hist=[]
+        for item in list(target.get("interaction_history",[]) or []) + list(source.get("interaction_history",[]) or []):
+            if isinstance(item,dict): hist.append(item)
+        hist.sort(key=lambda x:str(x.get("timestamp","")))
+        target["interaction_history"] = hist[-max(20,int(self.settings.get("interaction_history_limit",60))):]
+        target["interaction_count"] = int(target.get("interaction_count",0) or 0)+int(source.get("interaction_count",0) or 0)
+        for field in ("last_interaction","updated"):
+            vals=[str(target.get(field) or ""),str(source.get(field) or "")]
+            target[field]=max(vals)
+        self.memory_data.setdefault("characters",{})[target_key]=target
+        del self.memory_data["characters"][source_key]
+        # Source name and all its aliases now point to target.
+        self.add_character_alias(target_key, source_key, save=False)
+        amap=self._identity_alias_map(); src_aliases=amap.pop(source_key,[]) if source_key in amap else []
+        for alias in src_aliases if isinstance(src_aliases,list) else []:
+            self.add_character_alias(target_key, alias, save=False)
+        self.encountered_characters.discard(source_key); self.encountered_characters.add(target_key)
+        save_persistent_memory(self.settings, self.memory_data, self.running_summary)
+        return True
+
+    def _find_character_record(self, name):
+        """Return (canonical stored_name, record) using identity/alias resolution."""
+        name = self.resolve_character_identity(name)
+        if not name: return None, None
+        store = self.memory_data.get("characters", {})
+        for stored_name, record in store.items():
+            if normalize_identity_name(stored_name).casefold() == normalize_identity_name(name).casefold():
+                return stored_name, record
+        return None, None
+
+    def _current_context_is_private_tell(self):
+        latest = self.last_external_event or {}
+        return latest.get("channel") == "Tell"
+
+    def _select_interaction_events(self, history, limit=None, allow_private=False, query_text=""):
+        """Select recent, important, and context-relevant past interactions."""
+        if not isinstance(history, list):
+            return []
+        limit = limit or max(2, int(self.settings.get("memory_relevant_events_per_person", 6)))
+        usable = [
+            item for item in history
+            if isinstance(item, dict) and (allow_private or not item.get("private", False))
+        ]
+        if not usable:
+            return []
+
+        query_words = set(re.findall(r"[a-zA-Z0-9_'’-]{4,}", str(query_text or "").casefold()))
+
+        # Always preserve the newest two, then fill remaining slots with the
+        # strongest mix of topic relevance and durable importance. This lets an
+        # old but relevant event return when the conversation circles back to it.
+        recent_count = min(2, limit)
+        chosen = list(usable[-recent_count:])
+        seen = {str(item.get("summary", "")).casefold() for item in chosen}
+        candidates = []
+        for index, item in enumerate(usable[:-recent_count] if recent_count else usable):
+            text = str(item.get("summary", "")) + " " + " ".join(
+                str(x) for x in (item.get("topics") or []) if str(x).strip()
+            )
+            words = set(re.findall(r"[a-zA-Z0-9_'’-]{4,}", text.casefold()))
+            overlap = len(words & query_words)
+            try:
+                importance = int(item.get("importance", 0) or 0)
+            except Exception:
+                importance = 0
+            recency_bonus = index / max(1, len(usable))
+            score = (overlap * 6) + (importance * 1.5) + recency_bonus
+            candidates.append((score, str(item.get("timestamp", "")), item))
+        candidates.sort(key=lambda row: (row[0], row[1]), reverse=True)
+        for _, _, item in candidates:
+            key = str(item.get("summary", "")).casefold()
+            if key and key not in seen:
+                chosen.append(item)
+                seen.add(key)
+            if len(chosen) >= limit:
+                break
+        chosen.sort(key=lambda item: str(item.get("timestamp", "")))
+        return chosen[-limit:]
+
+    def _memory_for_current_context(self):
+        characters = self.memory_data.get("characters", {})
+        if not characters:
+            return []
+
+        active = []
+        seen = set()
+        allow_private = self._current_context_is_private_tell()
+        query_text = "\n".join(
+            f"{e.get('speaker', '')}: {e.get('message', '')}"
+            for e in list(self.context)[-12:]
+            if self._event_is_visible_to_ai(e)
+        )
+        for event in self.context:
+            if event.get("self"):
+                continue
+            name = (event.get("speaker") or "").strip()
+            key = name.casefold()
+            if not name or key in seen:
+                continue
+            seen.add(key)
+            _, entry = self._find_character_record(name)
+            relationship = ""
+            history = []
+            if isinstance(entry, dict):
+                notes = (entry.get("notes") or "").strip()
+                relationship = (entry.get("relationship") or "").strip()
+                history = self._select_interaction_events(
+                    entry.get("interaction_history", []),
+                    allow_private=allow_private,
+                    query_text=query_text,
+                )
+            else:
+                notes = str(entry or "").strip()
+            if notes or relationship or history:
+                active.append((name, notes, relationship, history))
+        return active
+
+    def emotional_state_text(self):
+        state = self.memory_data.get("emotional_state", {})
+        if not isinstance(state, dict) or not state:
+            return ""
+        parts = []
+        summary = str(state.get("summary") or "").strip()
+        if summary:
+            parts.append(summary)
+        emotions = state.get("emotions") if isinstance(state.get("emotions"), list) else []
+        if emotions:
+            parts.append("Current feelings: " + ", ".join(str(x) for x in emotions[:8]))
+        toward = state.get("toward") if isinstance(state.get("toward"), dict) else {}
+        if toward:
+            vals = [f"{k}: {v}" for k, v in list(toward.items())[:8] if str(v).strip()]
+            if vals:
+                parts.append("Feelings toward others: " + "; ".join(vals))
+        return "\n".join(parts).strip()
+
+    @storage.synchronized
+    def character_knowledge_items(self, include_dm_only=False):
+        items = self.memory_data.get("character_knowledge", [])
+        if not isinstance(items, list):
+            return []
+        result = []
+        for item in items:
+            if isinstance(item, str):
+                item = {"fact": item, "privacy": "character"}
+            if not isinstance(item, dict):
+                continue
+            fact = " ".join(str(item.get("fact") or "").split()).strip()
+            if not fact:
+                continue
+            privacy = str(item.get("privacy") or "character").casefold()
+            if privacy not in ("public", "shared", "character", "private", "dm_only"):
+                privacy = "character"
+            if privacy == "dm_only" and not include_dm_only:
+                continue
+            clean = dict(item)
+            clean["fact"] = fact
+            clean["privacy"] = privacy
+            result.append(clean)
+        return result
+
+    def _ensure_knowledge_ids(self):
+        """Ensure every knowledge entry is structured and has a stable local id."""
+        items = self.memory_data.get("character_knowledge", [])
+        if not isinstance(items, list):
+            self.memory_data["character_knowledge"] = []
+            return False
+        changed = False
+        normalized = []
+        for item in items:
+            if isinstance(item, str):
+                fact = " ".join(item.split()).strip()
+                if not fact:
+                    changed = True
+                    continue
+                item = {"fact": fact, "privacy": "character", "confidence": "known", "source": "legacy"}
+                changed = True
+            if not isinstance(item, dict):
+                changed = True
+                continue
+            if not str(item.get("id") or "").strip():
+                item["id"] = uuid.uuid4().hex[:12]
+                changed = True
+            normalized.append(item)
+        if normalized != items:
+            self.memory_data["character_knowledge"] = normalized
+        return changed
+
+    @storage.synchronized
+    def save_character_intelligence(self):
+        self._ensure_knowledge_ids()
+        save_persistent_memory(self.settings, self.memory_data, self.running_summary)
+
+    @storage.synchronized
+    def add_character_knowledge(self, fact, privacy="character", confidence="known", source="manual"):
+        fact = " ".join(str(fact or "").split()).strip()
+        if not fact:
+            return None
+        privacy = str(privacy or "character").casefold()
+        if privacy not in ("public", "shared", "character", "private", "dm_only"):
+            privacy = "character"
+        confidence = str(confidence or "known").casefold()
+        if confidence not in ("known", "believed", "uncertain", "rumor"):
+            confidence = "known"
+        stamp = datetime.now().isoformat(timespec="seconds")
+        item = {
+            "id": uuid.uuid4().hex[:12],
+            "fact": fact[:600],
+            "privacy": privacy,
+            "source": str(source or "manual")[:120],
+            "confidence": confidence,
+            "updated": stamp,
+            "manual": True,
+        }
+        items = self.memory_data.setdefault("character_knowledge", [])
+        if not isinstance(items, list):
+            items = []
+            self.memory_data["character_knowledge"] = items
+        items.append(item)
+        self.memory_data["character_knowledge"] = items[-80:]
+        self.save_character_intelligence()
+        return item["id"]
+
+    @storage.synchronized
+    def update_character_knowledge(self, knowledge_id, *, fact=None, privacy=None, confidence=None, source=None):
+        self._ensure_knowledge_ids()
+        items = self.memory_data.get("character_knowledge", [])
+        for item in items if isinstance(items, list) else []:
+            if not isinstance(item, dict) or str(item.get("id")) != str(knowledge_id):
+                continue
+            if fact is not None:
+                clean = " ".join(str(fact).split()).strip()
+                if not clean:
+                    return False
+                item["fact"] = clean[:600]
+            if privacy is not None:
+                p = str(privacy).casefold()
+                if p not in ("public", "shared", "character", "private", "dm_only"):
+                    return False
+                item["privacy"] = p
+            if confidence is not None:
+                c = str(confidence).casefold()
+                if c not in ("known", "believed", "uncertain", "rumor"):
+                    return False
+                item["confidence"] = c
+            if source is not None:
+                item["source"] = str(source or "manual")[:120]
+            item["updated"] = datetime.now().isoformat(timespec="seconds")
+            item["manual"] = True
+            self.save_character_intelligence()
+            return True
+        return False
+
+    @storage.synchronized
+    def delete_character_knowledge(self, knowledge_id):
+        self._ensure_knowledge_ids()
+        items = self.memory_data.get("character_knowledge", [])
+        if not isinstance(items, list):
+            return False
+        before = len(items)
+        self.memory_data["character_knowledge"] = [
+            item for item in items
+            if not (isinstance(item, dict) and str(item.get("id")) == str(knowledge_id))
+        ]
+        if len(self.memory_data["character_knowledge"]) == before:
+            return False
+        self.save_character_intelligence()
+        return True
+
+    def _ensure_continuity_ids(self):
+        changed = False
+        for key in ("story_threads", "continuity_events", "commitments"):
+            items = self.memory_data.get(key, [])
+            if not isinstance(items, list):
+                self.memory_data[key] = []
+                changed = True
+                continue
+            for item in items:
+                if isinstance(item, dict) and not str(item.get("id") or "").strip():
+                    item["id"] = uuid.uuid4().hex[:12]
+                    changed = True
+        return changed
+
+    def continuity_items(self, kind, include_private=True):
+        key = {"event":"continuity_events", "thread":"story_threads", "commitment":"commitments"}.get(kind, kind)
+        items = self.memory_data.get(key, [])
+        if not isinstance(items, list):
+            return []
+        result = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            if not include_private and item.get("private", False):
+                continue
+            result.append(dict(item))
+        return result
+
+    @storage.synchronized
+    def add_continuity_item(self, kind, summary, status=None, importance=5, participants=None,
+                            private=False, due="", direction="", notes=""):
+        mapping = {"event":"continuity_events", "thread":"story_threads", "commitment":"commitments"}
+        key = mapping.get(kind)
+        summary = " ".join(str(summary or "").split()).strip()
+        if not key or not summary:
+            return None
+        try: importance = max(1, min(10, int(importance)))
+        except Exception: importance = 5
+        stamp = datetime.now().isoformat(timespec="seconds")
+        defaults = {"event":"recorded", "thread":"active", "commitment":"active"}
+        item = {"id":uuid.uuid4().hex[:12], "summary":summary[:800],
+                "status":str(status or defaults[kind]).casefold(), "importance":importance,
+                "participants":[str(x).strip()[:100] for x in (participants or []) if str(x).strip()][:12],
+                "private":bool(private), "updated":stamp, "manual":True}
+        if kind == "event": item["timestamp"] = stamp
+        if kind == "commitment":
+            item["due"] = str(due or "")[:120]
+            item["direction"] = str(direction or "")[:120]
+        if notes: item["notes"] = str(notes)[:800]
+        self.memory_data.setdefault(key, []).append(item)
+        limits={"continuity_events":200,"story_threads":60,"commitments":100}
+        self.memory_data[key] = self.memory_data[key][-limits[key]:]
+        self.save_character_intelligence()
+        return item["id"]
+
+    @storage.synchronized
+    def update_continuity_item(self, kind, item_id, **changes):
+        mapping = {"event":"continuity_events", "thread":"story_threads", "commitment":"commitments"}
+        key = mapping.get(kind)
+        if not key: return False
+        for item in self.memory_data.get(key, []):
+            if not isinstance(item, dict) or str(item.get("id")) != str(item_id): continue
+            for field in ("summary","status","due","direction","notes"):
+                if field in changes and changes[field] is not None:
+                    item[field] = str(changes[field]).strip()[:800 if field in ("summary","notes") else 120]
+            if "importance" in changes:
+                try: item["importance"] = max(1,min(10,int(changes["importance"])))
+                except Exception: pass
+            if "participants" in changes:
+                item["participants"]=[str(x).strip()[:100] for x in (changes["participants"] or []) if str(x).strip()][:12]
+            if "private" in changes: item["private"] = bool(changes["private"])
+            item["manual"] = True; item["updated"] = datetime.now().isoformat(timespec="seconds")
+            self.save_character_intelligence(); return True
+        return False
+
+    @storage.synchronized
+    def delete_continuity_item(self, kind, item_id):
+        mapping = {"event":"continuity_events", "thread":"story_threads", "commitment":"commitments"}
+        key=mapping.get(kind)
+        if not key: return False
+        items=self.memory_data.get(key, []); before=len(items)
+        self.memory_data[key]=[x for x in items if not (isinstance(x,dict) and str(x.get("id"))==str(item_id))]
+        if len(self.memory_data[key]) == before: return False
+        self.save_character_intelligence(); return True
+
+    def relevant_continuity(self, query_text="", limit=12):
+        """Return a small relevance-ranked continuity slice instead of dumping history."""
+        tokens=set(re.findall(r"[A-Za-z0-9']{3,}", str(query_text).casefold()))
+        allow_private=self._current_context_is_private_tell()
+        scored=[]
+        for kind,key in (("commitment","commitments"),("thread","story_threads"),("event","continuity_events")):
+            for item in self.memory_data.get(key, []):
+                if not isinstance(item,dict) or (item.get("private") and not allow_private): continue
+                status=str(item.get("status") or "").casefold()
+                active = status in ("active","open","waiting","recorded")
+                text=" ".join([str(item.get("summary") or ""), " ".join(item.get("participants") or []), str(item.get("notes") or "")])
+                overlap=len(tokens & set(re.findall(r"[A-Za-z0-9']{3,}", text.casefold())))
+                imp=int(item.get("importance",5) or 5)
+                score=overlap*8+imp+(12 if kind=="commitment" and active else 0)+(8 if kind=="thread" and active else 0)
+                if active or overlap or imp>=8: scored.append((score,kind,item))
+        scored.sort(key=lambda x:(x[0],str(x[2].get("updated",x[2].get("timestamp","")))), reverse=True)
+        return scored[:max(1,int(limit))]
+
+    def prepare_correction_candidate(self, original_draft, pasted_text=None):
+        """Remember an AI-authored draft until the player's actual NWN line arrives.
+
+        pasted_text is retained only as diagnostic context. The final sent line from
+        the NWN log is authoritative, so edits made inside NWN are learned too.
+        """
+        original = " ".join(str(original_draft or "").split()).strip()
+        if not original:
+            self.pending_correction_draft = None
+            return
+        self.pending_correction_draft = {
+            "original": original,
+            "pasted": " ".join(str(pasted_text or original).split()).strip(),
+            "timestamp": time.time(),
+        }
+
+    @storage.synchronized
+    def _capture_player_correction(self, final_text):
+        pending = self.pending_correction_draft
+        self.pending_correction_draft = None
+        if not isinstance(pending, dict):
+            return False
+        if time.time() - float(pending.get("timestamp", 0) or 0) > 600:
+            return False
+        original = " ".join(str(pending.get("original") or "").split()).strip()
+        final = " ".join(str(final_text or "").split()).strip()
+        if not original or not final or original == final:
+            return False
+        # Avoid treating a completely unrelated manually-typed line as an edit.
+        ratio = difflib.SequenceMatcher(None, original.casefold(), final.casefold()).ratio()
+        token_a = set(re.findall(r"[A-Za-z0-9']+", original.casefold()))
+        token_b = set(re.findall(r"[A-Za-z0-9']+", final.casefold()))
+        overlap = len(token_a & token_b) / max(1, min(len(token_a), len(token_b)))
+        if ratio < 0.28 and overlap < 0.35:
+            return False
+        store = self.memory_data.setdefault("correction_examples", [])
+        store.append({
+            "id": uuid.uuid4().hex[:12],
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+            "draft": original,
+            "final": final,
+            "similarity": round(ratio, 3),
+        })
+        del store[:-40]
+        save_persistent_memory(self.settings, self.memory_data, self.running_summary)
+        print("[ADAPTIVE] Learned from a player edit to an AI draft.")
+        return True
+
+    def correction_preferences_text(self):
+        prefs = self.memory_data.get("correction_preferences", {})
+        if not isinstance(prefs, dict):
+            return ""
+        lines=[]
+        summary=str(prefs.get("summary") or "").strip()
+        if summary: lines.append(summary)
+        for key,label in (("prefer","Prefer"),("avoid","Avoid")):
+            vals=prefs.get(key) or []
+            if isinstance(vals,list) and vals:
+                lines.append(label+": "+"; ".join(str(x) for x in vals[:10] if str(x).strip()))
+        return "\n".join(lines).strip()
+
+    def development_proposals(self):
+        vals=self.memory_data.get("development_proposals", [])
+        return [x for x in vals if isinstance(x,dict) and str(x.get("statement") or "").strip()]
+
+    def approved_development_items(self):
+        vals=self.memory_data.get("approved_development", [])
+        return [x for x in vals if isinstance(x,dict) and str(x.get("statement") or "").strip()]
+
+    @storage.synchronized
+    def approve_development(self, proposal_id):
+        proposals=self.memory_data.setdefault("development_proposals", [])
+        for i,item in enumerate(list(proposals)):
+            if isinstance(item,dict) and str(item.get("id"))==str(proposal_id):
+                approved=dict(item); approved["approved_at"]=datetime.now().isoformat(timespec="seconds")
+                approved["status"]="approved"; approved["manual"]=True
+                self.memory_data.setdefault("approved_development", []).append(approved)
+                del proposals[i]
+                save_persistent_memory(self.settings,self.memory_data,self.running_summary)
+                return True
+        return False
+
+    @storage.synchronized
+    def reject_development(self, proposal_id):
+        proposals=self.memory_data.setdefault("development_proposals", [])
+        for i,item in enumerate(list(proposals)):
+            if isinstance(item,dict) and str(item.get("id"))==str(proposal_id):
+                fingerprint=self._development_fingerprint(item)
+                rejected=self.memory_data.setdefault("rejected_development", [])
+                if fingerprint and fingerprint not in rejected: rejected.append(fingerprint)
+                del rejected[:-100]
+                del proposals[i]
+                save_persistent_memory(self.settings,self.memory_data,self.running_summary)
+                return True
+        return False
+
+    @storage.synchronized
+    def delete_approved_development(self, item_id):
+        vals=self.memory_data.setdefault("approved_development", [])
+        before=len(vals)
+        vals[:]=[x for x in vals if not (isinstance(x,dict) and str(x.get("id"))==str(item_id))]
+        if len(vals)!=before:
+            save_persistent_memory(self.settings,self.memory_data,self.running_summary); return True
+        return False
+
+    @staticmethod
+    def _development_fingerprint(item):
+        area=str(item.get("area") or "general").casefold().strip()
+        statement=re.sub(r"[^a-z0-9]+"," ",str(item.get("statement") or "").casefold()).strip()
+        return area+":"+statement[:180]
+
+    def learned_voice_text(self):
+        voice = self.memory_data.get("learned_voice", {})
+        if not isinstance(voice, dict) or not voice:
+            return ""
+        lines = []
+        style = str(voice.get("style_summary") or "").strip()
+        if style:
+            lines.append(style)
+        vocab = voice.get("preferred_vocabulary") or []
+        if isinstance(vocab, list) and vocab:
+            lines.append("Preferred vocabulary/phrases: " + ", ".join(str(x) for x in vocab[:16]))
+        patterns = voice.get("sentence_patterns") or []
+        if isinstance(patterns, list) and patterns:
+            lines.append("Recurring sentence patterns: " + "; ".join(str(x) for x in patterns[:8]))
+        emotes = str(voice.get("emote_style") or "").strip()
+        if emotes:
+            lines.append("Emote style: " + emotes)
+        emotions = voice.get("emotional_expression") or {}
+        if isinstance(emotions, dict) and emotions:
+            parts = [f"{k}: {v}" for k, v in list(emotions.items())[:8] if str(v).strip()]
+            if parts:
+                lines.append("Emotional expression: " + "; ".join(parts))
+        avoid = voice.get("avoid_patterns") or []
+        if isinstance(avoid, list) and avoid:
+            lines.append("Usually avoids: " + "; ".join(str(x) for x in avoid[:8]))
+        return "\n".join(lines).strip()
+
+    def reset_learned_voice(self):
+        self.memory_data["learned_voice"] = {}
+        self.memory_data["voice_examples"] = []
+        save_persistent_memory(self.settings, self.memory_data, self.running_summary)
+        print("[MEMORY] Learned character voice reset. Explicit character profile is unchanged.")
+
+    @storage.synchronized
+    def update_character_record(self, name, notes=None, relationship=None):
+        """Create or update one persistent relationship/memory record."""
+        name = str(name or "").strip()
+        if not name:
+            print("[MEMORY] Cannot save an empty character name.")
+            return False
+
+        if name.casefold() == self.settings.get("character_name", "").casefold():
+            print("[MEMORY] Refusing to create a relationship record for the active player character.")
+            return False
+
+        try:
+            store = self.memory_data.setdefault("characters", {})
+
+            # Match existing names case-insensitively so capitalization changes
+            # do not create duplicate records.
+            record_key = name
+            for existing_name in list(store):
+                if str(existing_name).casefold() == name.casefold():
+                    record_key = existing_name
+                    break
+
+            current = store.get(record_key, {})
+            if not isinstance(current, dict):
+                current = {"notes": str(current or "").strip()}
+
+            limit = int(self.settings.get("memory_max_characters_per_person", 1600))
+
+            if notes is not None:
+                current["notes"] = str(notes or "").strip()[:limit]
+            if relationship is not None:
+                current["relationship"] = str(relationship or "").strip()[:800]
+
+            current["updated"] = datetime.now().isoformat(timespec="seconds")
+
+            # Clearing the editable fields removes a record only if there is no
+            # structured interaction history to preserve.
+            if (
+                not current.get("notes", "").strip()
+                and not current.get("relationship", "").strip()
+                and not current.get("interaction_history")
+            ):
+                store.pop(record_key, None)
+                print(f"[MEMORY] Removed empty relationship/memory record for {record_key}.")
+            else:
+                store[record_key] = current
+
+            save_persistent_memory(
+                self.settings,
+                self.memory_data,
+                self.running_summary,
+            )
+            self.encountered_characters.add(record_key)
+            return True
+        except Exception as exc:
+            print(
+                f"[MEMORY ERROR] Could not save relationship/memory for {name}: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            return False
+
+    @storage.synchronized
+    def delete_character_record(self, name):
+        """Manually delete an erroneous relationship/memory entity.
+
+        This intentionally does not delete knowledge or continuity records: a
+        bad relationship entity may still describe a real campaign fact.
+        """
+        canonical = self.resolve_character_identity(name, create_alias=False)
+        key, item = self._find_character_record(canonical or name)
+        store = self.memory_data.setdefault("characters", {})
+        if key not in store:
+            return False
+        store.pop(key, None)
+        aliases = self._identity_alias_map()
+        doomed = [a for a, target in aliases.items() if normalize_identity_name(target).casefold() == normalize_identity_name(key).casefold()]
+        for alias in doomed:
+            aliases.pop(alias, None)
+        self.encountered_characters = {
+            x for x in self.encountered_characters
+            if normalize_identity_name(x).casefold() != normalize_identity_name(key).casefold()
+        }
+        save_persistent_memory(self.settings, self.memory_data, self.running_summary)
+        print(f"[MEMORY] Deleted relationship/memory entity: {key}")
+        return True
+
+    def _event_is_visible_to_ai(self, event):
+        cid = event.get("_context_id")
+        if cid in self.ignored_context_ids:
+            return False
+        if self.settings.get("ignore_ooc_for_ai", True) and event.get("_mode") == "OOC":
+            return False
+        return True
+
+    def _active_context_events(self):
+        # If the latest external message is a Tell, use only that private Tell
+        # thread plus pinned messages. Otherwise use normal public context and
+        # exclude Tell traffic to prevent private conversations leaking across.
+        latest = self.last_external_event or {}
+        if latest.get("channel") == "Tell":
+            partner = (latest.get("speaker") or self.last_tell_partner or "Tell").casefold()
+            base = list(self.tell_contexts.get(partner, []))
+        else:
+            base = [e for e in self.context if e.get("channel") != "Tell"]
+
+        by_id = {e.get("_context_id"): e for e in self.context}
+        for cid in self.pinned_context_ids:
+            e = by_id.get(cid)
+            if e and e not in base:
+                base.insert(0, e)
+
+        return [e for e in base if self._event_is_visible_to_ai(e)]
+
+    def context_rows(self):
+        rows = []
+        for e in self.context:
+            cid = e.get("_context_id")
+            rows.append({
+                "id": cid,
+                "speaker": "YOU" if e.get("self") else e.get("speaker", ""),
+                "channel": e.get("channel", ""),
+                "mode": e.get("_mode", "IC"),
+                "message": e.get("message", ""),
+                "self": bool(e.get("self")),
+                "ignored": cid in self.ignored_context_ids,
+                "pinned": cid in self.pinned_context_ids,
+            })
+        return rows
+
+    def _protected_translation_terms(self):
+        raw = str(self.settings.get("translation_protected_terms", ""))
+        return tuple(line.strip() for line in raw.splitlines() if line.strip())
+
+    def translate_recent_chat(self, *, only_new=False, limit=3):
+        rows = [row for row in self.context_rows() if not row.get("self")]
+        if only_new:
+            rows = [row for row in rows if int(row.get("id") or 0) > self.last_translated_context_id]
+        else:
+            rows = rows[-max(1, int(limit)) :]
+        if not rows:
+            self.translation_status = "No new incoming chat to translate."
+            return []
+        source = "auto" if self.settings.get("translation_auto_detect", True) else self.settings.get("game_language", "English")
+        request = TranslationRequest(
+            source_language=source,
+            target_language=self.settings.get("user_language", "English"),
+            direction=TranslationDirection.INCOMING,
+            messages=tuple(
+                TranslationMessage(
+                    id=str(row["id"]),
+                    text=row["message"],
+                    speaker=row["speaker"],
+                    channel=row["channel"],
+                )
+                for row in rows
+            ),
+            protected_terms=self._protected_translation_terms(),
+        )
+        try:
+            self.translation_status = "Translating incoming chat..."
+            result = self.translation_service.translate(request)
+            known = {item["id"] for item in self.translated_chat}
+            for message in result.messages:
+                item = {"id": message.id, "speaker": message.speaker, "channel": message.channel, "text": message.translated_text, "language": message.detected_source_language.name if message.detected_source_language else ""}
+                if message.id in known:
+                    self.translated_chat = [item if existing["id"] == message.id else existing for existing in self.translated_chat]
+                else:
+                    self.translated_chat.append(item); known.add(message.id)
+            self.translated_chat = self.translated_chat[-200:]
+            self.last_translated_context_id = max(int(row["id"]) for row in rows)
+            self.translated_chat_version += 1
+            self.translation_status = f"Translated {len(result.messages)} message(s)."
+            return result.messages
+        except Exception as exc:
+            self.translation_status = f"Translation failed: {exc}"
+            print(f"[TRANSLATION ERROR] {exc}")
+            return []
+
+    def ignore_context_event(self, context_id, ignored=True):
+        if ignored:
+            self.ignored_context_ids.add(context_id)
+        else:
+            self.ignored_context_ids.discard(context_id)
+
+    def pin_context_event(self, context_id, pinned=True):
+        if pinned:
+            self.pinned_context_ids.add(context_id)
+        else:
+            self.pinned_context_ids.discard(context_id)
+
+    def forget_before(self, context_id):
+        kept = [e for e in self.context if e.get("_context_id", 0) >= context_id]
+        self.context.clear()
+        self.context.extend(kept)
+        live_ids = {e.get("_context_id") for e in kept}
+        self.ignored_context_ids.intersection_update(live_ids)
+        self.pinned_context_ids.intersection_update(live_ids)
+        print(f"[CONTEXT] Forgot messages before #{context_id}.")
+
+    def build_context_text(self):
+        lines = []
+
+        if self.current_area:
+            lines.append(f"CURRENT AREA: {self.current_area}")
+
+        campaign = load_campaign_memory(self.settings)
+        campaign_shared = str(campaign.get("shared_memory") or "").strip()
+        if campaign_shared:
+            lines.append("")
+            lines.append("SHARED CAMPAIGN MEMORY (character-readable world continuity):")
+            lines.append(campaign_shared)
+
+        emotional_state = self.emotional_state_text()
+        if emotional_state:
+            lines.append("")
+            lines.append("CURRENT CHARACTER EMOTIONAL STATE (continuity, not a command):")
+            lines.append(emotional_state)
+
+        knowledge = self.character_knowledge_items(include_dm_only=False)
+        if knowledge:
+            lines.append("")
+            lines.append("CHARACTER KNOWLEDGE (facts this character may reasonably know; private facts must not be revealed casually):")
+            for item in knowledge[-30:]:
+                label = str(item.get("privacy") or "character").upper()
+                lines.append(f"- [{label}] {item.get('fact', '')}")
+
+        if self.running_summary:
+            lines.append("")
+            lines.append("EARLIER SESSION SUMMARY:")
+            lines.append(self.running_summary)
+
+        learned_voice = self.learned_voice_text()
+        if learned_voice:
+            lines.append("")
+            lines.append(
+                "OBSERVED CHARACTER VOICE (learned only from IC lines actually sent by YOU; "
+                "the explicit character profile above always takes precedence):"
+            )
+            lines.append(learned_voice)
+
+        correction_prefs = self.correction_preferences_text()
+        if correction_prefs:
+            lines.append("")
+            lines.append("PLAYER CORRECTION PREFERENCES (learned from AI drafts the player edited and actually sent; apply as soft style guidance):")
+            lines.append(correction_prefs)
+
+        approved_dev = self.approved_development_items()
+        if approved_dev:
+            lines.append("")
+            lines.append("PLAYER-APPROVED CHARACTER DEVELOPMENT (intentional evolution of portrayal; explicit profile facts still remain authoritative):")
+            for item in approved_dev[-20:]:
+                lines.append(f"- [{str(item.get('area') or 'general').upper()}] {item.get('statement','')}")
+
+        memories = self._memory_for_current_context()
+        if memories:
+            lines.append("")
+            lines.append("PERSISTENT CHARACTER MEMORY / RELATIONSHIPS:")
+            for name, notes, relationship, interactions in memories:
+                details = []
+                if relationship:
+                    details.append(f"Relationship: {relationship}")
+                if notes:
+                    details.append(f"Memory: {notes}")
+                if details:
+                    lines.append(f"- {name}: " + " | ".join(details))
+                else:
+                    lines.append(f"- {name}")
+                for item in interactions:
+                    summary = str(item.get("summary") or "").strip()
+                    if not summary:
+                        continue
+                    importance = int(item.get("importance", 0) or 0)
+                    stamp = str(item.get("timestamp") or "")[:10]
+                    prefix = f"  • {stamp}: " if stamp else "  • "
+                    suffix = f" [importance {importance}/10]" if importance else ""
+                    lines.append(prefix + summary + suffix)
+
+        threads = self.memory_data.get("story_threads", [])
+        if isinstance(threads, list) and threads:
+            allow_private = self._current_context_is_private_tell()
+            visible_threads = [
+                item for item in threads
+                if isinstance(item, dict)
+                and str(item.get("status", "open")).casefold() != "resolved"
+                and (allow_private or not item.get("private", False))
+            ]
+            visible_threads.sort(
+                key=lambda item: (int(item.get("importance", 0) or 0), str(item.get("updated", ""))),
+                reverse=True,
+            )
+            if visible_threads:
+                lines.append("")
+                lines.append("OPEN STORY THREADS / UNRESOLVED MATTERS:")
+                for item in visible_threads[:8]:
+                    summary = str(item.get("summary") or "").strip()
+                    if summary:
+                        lines.append("- " + summary)
+
+        active_events = self._active_context_events()
+
+        continuity_query = " ".join(str(e.get("message") or "") for e in active_events[-12:])
+        relevant_continuity = self.relevant_continuity(continuity_query, limit=12)
+        if relevant_continuity:
+            lines.append("")
+            lines.append("RELEVANT CONTINUITY (prioritize active commitments and unresolved matters; resolved history is background only):")
+            for _score, kind, item in relevant_continuity:
+                status = str(item.get("status") or "").upper()
+                due = f" | due: {item.get('due')}" if item.get("due") else ""
+                lines.append(f"- [{kind.upper()} | {status} | importance {item.get('importance', 5)}/10{due}] {item.get('summary', '')}")
+
+        recent_for_lore = "\n".join(
+            f"{e.get('speaker', '')} {e.get('message', '')}" for e in active_events
+        )
+        lore = load_relevant_lore(
+            (self.running_summary or "") + "\n" + recent_for_lore,
+            self.settings.get("server_profile", "AUTO"),
+        )
+        if lore:
+            lines.append("")
+            lines.append("RELEVANT LORE REFERENCES:")
+            for filename, text in lore:
+                lines.append(f"--- {filename} ---")
+                lines.append(text)
+
+        if self.last_external_event and self.last_external_event.get("channel") == "Tell":
+            lines.append("")
+            lines.append(
+                "PRIVATE TELL CONTEXT: Answer only this Tell conversation. "
+                "Do not blend in unrelated public chat or other private Tell threads."
+            )
+
+        lines.append("")
+        lines.append("RECENT CHAT:")
+        for e in active_events:
+            prefix = "YOU" if e.get("self") else e.get("speaker", "")
+            mode = e.get("_mode", "IC")
+            lines.append(
+                f"#{e.get('_context_id')} {prefix} "
+                f"[{e.get('channel', 'Talk')}/{mode}]: {e.get('message', '')}"
+            )
+
+        if not active_events:
+            lines.append("(No active IC context after filters.)")
+
+        return "\n".join(lines).strip()
+
+    def _summary_prompt(self, events):
+        transcript = []
+        participants = []
+        seen = set()
+        participant_channels = {}
+        for e in events:
+            who = "YOU" if e.get("self") else (e.get("speaker") or "Unknown")
+            channel = e.get("channel", "Talk")
+            transcript.append(f"{who} [{channel}]: {e.get('message', '')}")
+            if not e.get("self"):
+                raw_name = (e.get("speaker") or "").strip()
+                name = self.resolve_character_identity(raw_name, create_alias=False) if raw_name else ""
+                if name:
+                    participant_channels.setdefault(name.casefold(), set()).add(channel)
+                if name and name.casefold() not in seen:
+                    seen.add(name.casefold())
+                    participants.append(name)
+
+        existing = {}
+        existing_relationships = {}
+        existing_interactions = {}
+        all_memory = self.memory_data.get("characters", {})
+        for name in participants:
+            stored_name, item = self._find_character_record(name)
+            if not isinstance(item, dict):
+                item = {"notes": str(item or "").strip()} if item else {}
+            notes = item.get("notes", "")
+            relationship = item.get("relationship", "")
+            if notes:
+                existing[name] = notes
+            if relationship:
+                existing_relationships[name] = relationship
+            history = item.get("interaction_history", [])
+            if isinstance(history, list) and history:
+                existing_interactions[name] = history[-8:]
+
+        voice_examples = self.memory_data.get("voice_examples", [])
+        if not isinstance(voice_examples, list):
+            voice_examples = []
+        voice_sample_text = [
+            str(item.get("message") or "").strip()
+            for item in voice_examples[-30:]
+            if isinstance(item, dict) and str(item.get("message") or "").strip()
+        ]
+        learned_voice = self.memory_data.get("learned_voice", {})
+        if not isinstance(learned_voice, dict):
+            learned_voice = {}
+        story_threads = self.memory_data.get("story_threads", [])
+        if not isinstance(story_threads, list):
+            story_threads = []
+        emotional_state = self.memory_data.get("emotional_state", {})
+        if not isinstance(emotional_state, dict):
+            emotional_state = {}
+        character_knowledge = self.character_knowledge_items(include_dm_only=False)
+        continuity_events = self.memory_data.get("continuity_events", []) if isinstance(self.memory_data.get("continuity_events"), list) else []
+        commitments = self.memory_data.get("commitments", []) if isinstance(self.memory_data.get("commitments"), list) else []
+        correction_examples = self.memory_data.get("correction_examples", []) if isinstance(self.memory_data.get("correction_examples"), list) else []
+        correction_preferences = self.memory_data.get("correction_preferences", {}) if isinstance(self.memory_data.get("correction_preferences"), dict) else {}
+        approved_development = self.approved_development_items()
+        rejected_development = self.memory_data.get("rejected_development", []) if isinstance(self.memory_data.get("rejected_development"), list) else []
+
+        prompt = (
+            "Maintain long-term memory for a live roleplay assistant. Return STRICT JSON only.\n"
+            "Use this exact high-level shape:\n"
+            '{"summary":"public rolling session summary","learned_voice":{"style_summary":"","preferred_vocabulary":[],"sentence_patterns":[],"emote_style":"","emotional_expression":{},"avoid_patterns":[]},"correction_preferences":{"summary":"","prefer":[],"avoid":[]},"development_proposals":[{"area":"personality|speaking_style|beliefs|goals|relationship_habit","statement":"possible durable evolution","evidence":"brief observed evidence","confidence":1}],"emotional_state":{"summary":"","emotions":[],"toward":{}},"character_knowledge":[{"fact":"","privacy":"character","source":"conversation","confidence":"known"}],"memories":{"Character Name":"durable facts"},"relationships":{"Character Name":"current relationship/attitude"},"interaction_events":{"Character Name":[{"summary":"what happened","importance":1,"topics":[],"unresolved":[],"private":false}]},"story_threads":[{"summary":"unresolved or continuing plot matter","status":"active","importance":1,"participants":[],"private":false}],"continuity_events":[{"summary":"significant event","importance":1,"participants":[],"private":false}],"commitments":[{"summary":"promise, debt, task, or obligation","status":"active","importance":1,"participants":[],"direction":"owed_by_me|owed_to_me|mutual|other","due":"","private":false}],"shared_with_players":{"Player Name":[{"fact":"important information this character explicitly revealed","private":false,"source":"conversation"}]}}\n\n'
+            "Rules:\n"
+            "1. Do not invent facts.\n"
+            "2. The public summary must NOT reveal private Tell content. Private Tell facts may appear only in per-character interaction_events or story_threads with private=true.\n"
+            "3. Memories contain durable facts useful when a person is encountered again.\n"
+            "4. Relationships describe current trust, attitude, obligations, conflicts, affection, suspicion, authority, or similar interpersonal state. Relationship/memory/interaction keys must identify a specific individual character, never a group, place, event, condition, topic, or descriptive noun phrase. For example, children missing since the Longest Year and people suffering in the slums belong in knowledge/continuity, NOT relationships.\n"
+            "5. interaction_events should record only meaningful interactions worth remembering. Give importance 1-10; 7-10 is significant. Preserve promises, debts, threats, discoveries, favors, betrayals, investigations, emotional turning points, and unresolved matters.\n"
+            "6. story_threads should preserve continuing plot lines, promises, investigations, goals, and unresolved questions. Keep existing active/waiting threads unless clearly resolved; mark resolved threads status=resolved rather than silently forgetting them.\n"
+            "7. learned_voice must be inferred ONLY from lines the player character actually sent, supplied under ACTUAL PLAYER VOICE EXAMPLES and lines marked YOU. Learn recurring vocabulary, sentence rhythm, emote habits, formality, and how emotions tend to be expressed. Do not imitate other speakers. Prefer stable recurring patterns over one-off wording.\n"
+            "8. The explicit character profile remains authoritative; learned_voice only describes observed portrayal and must not rewrite identity, beliefs, background, or goals.\n"
+            "9. Do not include the player character as a memories/relationships/interaction_events key.\n"
+            "10. emotional_state tracks the PLAYER CHARACTER's present emotional continuity only when supported by their words/actions or explicit context. Do not invent hidden feelings. Update gradually; do not treat a passing remark as a permanent personality change.\n"
+            "11. character_knowledge contains facts the PLAYER CHARACTER actually learned IC. Never learn from OOC, server/system text, DM-only notes, or information unavailable to the character. privacy may be public, shared, character, or private. Use private for sensitive facts the character knows but should not reveal casually. Never output dm_only.\n"
+            "12. Preserve useful existing knowledge unless contradicted or corrected. Merge duplicates rather than multiplying paraphrases.\n"
+            "13. continuity_events records only significant happenings worth recalling later; do not log ordinary chatter.\n"
+            "14. commitments tracks promises, debts, appointments, requested tasks, and obligations. Preserve active commitments until fulfilled, cancelled, or clearly obsolete.\n"
+            "15. Manual continuity records are authoritative. Do not contradict or silently remove them.\n"
+            "16. correction_preferences may be inferred ONLY from repeated differences in PLAYER EDIT CORRECTION EXAMPLES. Describe stable editing preferences, not the content of a single scene. Preserve useful existing preferences unless later corrections clearly supersede them.\n"
+            "17. shared_with_players records only important information THIS CHARACTER explicitly told a specific other player/character in the supplied IC conversation. Do not infer off-screen sharing, do not copy everything the other person said, and do not create entries for groups, places, or events as recipients. This is recall of what this character has revealed, not knowledge transfer into another character memory.\n"
+            "18. development_proposals are ONLY suggestions for durable character evolution. Propose one only when repeated IC portrayal provides meaningful evidence of a change in personality, speaking style, beliefs, goals, or relationship habits. Never auto-apply development. Never rewrite fixed biography/history, invent a change, or merely restate the explicit profile.\n"
+            "18. Do not propose development substantially equivalent to PLAYER-APPROVED DEVELOPMENT or anything listed as REJECTED DEVELOPMENT. A passing emotion, temporary guidance, one conversation, or one correction is not character development.\n\n"
+            f"PLAYER CHARACTER: {self.settings.get('character_name', '')}\n"
+            f"CURRENT AREA: {self.current_area or '(unknown)'}\n"
+            f"EARLIER PUBLIC SUMMARY:\n{self.running_summary or '(none)'}\n\n"
+            f"EXISTING LEARNED VOICE:\n{json.dumps(learned_voice, ensure_ascii=False)}\n\n"
+            f"ACTUAL PLAYER VOICE EXAMPLES (these are lines that really appeared in the NWN log):\n{json.dumps(voice_sample_text, ensure_ascii=False)}\n\n"
+            f"EXISTING MEMORIES:\n{json.dumps(existing, ensure_ascii=False)}\n\n"
+            f"EXISTING RELATIONSHIPS:\n{json.dumps(existing_relationships, ensure_ascii=False)}\n\n"
+            f"RECENT STRUCTURED INTERACTIONS:\n{json.dumps(existing_interactions, ensure_ascii=False)}\n\n"
+            f"EXISTING STORY THREADS:\n{json.dumps(story_threads[-20:], ensure_ascii=False)}\n\n"
+            f"EXISTING EMOTIONAL STATE:\n{json.dumps(emotional_state, ensure_ascii=False)}\n\n"
+            f"EXISTING CHARACTER KNOWLEDGE:\n{json.dumps(character_knowledge[-40:], ensure_ascii=False)}\n\n"
+            f"EXISTING CONTINUITY EVENTS:\n{json.dumps(continuity_events[-40:], ensure_ascii=False)}\n\n"
+            f"EXISTING COMMITMENTS:\n{json.dumps(commitments[-30:], ensure_ascii=False)}\n\n"
+            f"EXISTING CORRECTION PREFERENCES:\n{json.dumps(correction_preferences, ensure_ascii=False)}\n\n"
+            f"PLAYER EDIT CORRECTION EXAMPLES (AI draft -> actual line sent):\n{json.dumps(correction_examples[-20:], ensure_ascii=False)}\n\n"
+            f"PLAYER-APPROVED DEVELOPMENT:\n{json.dumps(approved_development[-20:], ensure_ascii=False)}\n\n"
+            f"REJECTED DEVELOPMENT FINGERPRINTS:\n{json.dumps(rejected_development[-60:], ensure_ascii=False)}\n\n"
+            "NEW TRANSCRIPT:\n" + "\n".join(transcript)
+        )
+        instructions = (
+            "You are a precise roleplay continuity and character-voice summarizer. "
+            "Return valid JSON only, with no markdown or commentary."
+        )
+
+        return instructions, prompt
+
+    def _apply_summary_response(self, events, parsed):
+        story_threads = self.memory_data.get("story_threads", [])
+        if not isinstance(story_threads, list):
+            story_threads = []
+        participants = []
+        participant_channels = {}
+        for event in events:
+            if not event.get("self"):
+                name = self.resolve_character_identity(event.get("speaker", ""), create_alias=False)
+                if name:
+                    if name not in participants:
+                        participants.append(name)
+                    participant_channels.setdefault(name.casefold(), set()).add(event.get("channel", "Talk"))
+        summary = str(parsed.get("summary") or "").strip()
+        memories = parsed.get("memories") or {}
+        relationships = parsed.get("relationships") or {}
+        interactions = parsed.get("interaction_events") or {}
+        new_voice = parsed.get("learned_voice") or {}
+        new_correction_preferences = parsed.get("correction_preferences") or {}
+        new_development_proposals = parsed.get("development_proposals") or []
+        new_shared_with_players = parsed.get("shared_with_players") or {}
+        new_threads = parsed.get("story_threads") or []
+        new_emotional_state = parsed.get("emotional_state") or {}
+        new_knowledge = parsed.get("character_knowledge") or []
+        new_continuity_events = parsed.get("continuity_events") or []
+        new_commitments = parsed.get("commitments") or []
+
+        if summary:
+            self.running_summary = summary
+
+        stamp = datetime.now().isoformat(timespec="seconds")
+        store = self.memory_data.setdefault("characters", {})
+        limit = int(self.settings.get("memory_max_characters_per_person", 1600))
+        interaction_limit = max(10, int(self.settings.get("interaction_history_limit", 60)))
+
+        confirmed_relationship_names = set(participants)
+        confirmed_relationship_names.update(str(x) for x in store.keys())
+        confirmed_relationship_names.update(str(x) for x in self.encountered_characters)
+        confirmed_relationship_names.update(str(x) for x in self._identity_alias_map().keys())
+
+        def relationship_entity_allowed(name):
+            allowed = is_likely_relationship_character(name, confirmed_relationship_names)
+            if not allowed:
+                print(f"[MEMORY] Rejected non-character relationship entity: {name!r}")
+            return allowed
+
+        def record_key_for(name):
+            # Route summarizer output through the same identity resolver used
+            # by live chat so titled/aliased references do not create a
+            # second durable character record.
+            name = normalize_identity_name(name)
+            resolved = self.resolve_character_identity(name, create_alias=False)
+            for existing_name in list(store):
+                if normalize_identity_name(existing_name).casefold() == normalize_identity_name(resolved).casefold():
+                    return existing_name
+            return resolved
+
+        if isinstance(memories, dict):
+            for name, notes in memories.items():
+                name = str(name or "").strip()
+                notes = " ".join(str(notes or "").split()).strip()
+                if not name or not notes or name.casefold() == self.settings.get("character_name", "").casefold():
+                    continue
+                if not relationship_entity_allowed(name):
+                    continue
+                record_key = record_key_for(name)
+                current = store.get(record_key, {})
+                if not isinstance(current, dict):
+                    current = {}
+                current.setdefault("interaction_history", [])
+                current["notes"] = notes[:limit]
+                current["updated"] = stamp
+                store[record_key] = current
+                self.encountered_characters.add(record_key)
+
+        if isinstance(relationships, dict):
+            for name, relationship in relationships.items():
+                name = str(name or "").strip()
+                relationship = " ".join(str(relationship or "").split()).strip()
+                if not name or not relationship or name.casefold() == self.settings.get("character_name", "").casefold():
+                    continue
+                if not relationship_entity_allowed(name):
+                    continue
+                record_key = record_key_for(name)
+                current = store.get(record_key, {})
+                if not isinstance(current, dict):
+                    current = {}
+                current.setdefault("interaction_history", [])
+                current["relationship"] = relationship[:800]
+                current["updated"] = stamp
+                store[record_key] = current
+                self.encountered_characters.add(record_key)
+
+        if isinstance(interactions, dict):
+            for name, items in interactions.items():
+                name = str(name or "").strip()
+                if not name or name.casefold() == self.settings.get("character_name", "").casefold():
+                    continue
+                if not relationship_entity_allowed(name):
+                    continue
+                if not isinstance(items, list):
+                    items = [items]
+                record_key = record_key_for(name)
+                current = store.get(record_key, {})
+                if not isinstance(current, dict):
+                    current = {}
+                history = current.setdefault("interaction_history", [])
+                if not isinstance(history, list):
+                    history = []
+                    current["interaction_history"] = history
+                existing_summaries = {
+                    str(x.get("summary", "")).strip().casefold()
+                    for x in history[-20:] if isinstance(x, dict)
+                }
+                added = 0
+                for item in items:
+                    if isinstance(item, str):
+                        item = {"summary": item}
+                    if not isinstance(item, dict):
+                        continue
+                    event_summary = " ".join(str(item.get("summary") or "").split()).strip()
+                    if not event_summary or event_summary.casefold() in existing_summaries:
+                        continue
+                    try:
+                        importance = max(1, min(10, int(item.get("importance", 5))))
+                    except Exception:
+                        importance = 5
+                    topics = item.get("topics") if isinstance(item.get("topics"), list) else []
+                    unresolved = item.get("unresolved") if isinstance(item.get("unresolved"), list) else []
+                    private = bool(item.get("private", False))
+                    # If this chunk contains this participant only in Tell,
+                    # force private=True even if the model omitted it.
+                    channels = participant_channels.get(name.casefold(), set())
+                    if channels and channels == {"Tell"}:
+                        private = True
+                    history.append({
+                        "timestamp": stamp,
+                        "area": self.current_area,
+                        "summary": event_summary,
+                        "importance": importance,
+                        "topics": [str(x)[:100] for x in topics[:8]],
+                        "unresolved": [str(x)[:180] for x in unresolved[:8]],
+                        "private": private,
+                    })
+                    existing_summaries.add(event_summary.casefold())
+                    added += 1
+                if len(history) > interaction_limit:
+                    del history[:-interaction_limit]
+                current["interaction_count"] = int(current.get("interaction_count", 0) or 0) + added
+                current["last_interaction"] = stamp
+                current["updated"] = stamp
+                store[record_key] = current
+                self.encountered_characters.add(record_key)
+
+        # Learned voice is updated only when the batch contains actual
+        # player-character IC dialogue.
+        has_player_voice = any(e.get("self") for e in events)
+        if (
+            self.settings.get("learned_voice_enabled", True)
+            and has_player_voice
+            and isinstance(new_voice, dict)
+            and new_voice
+        ):
+            cleaned_voice = {}
+            for key in (
+                "style_summary", "preferred_vocabulary", "sentence_patterns",
+                "emote_style", "emotional_expression", "avoid_patterns"
+            ):
+                if key in new_voice:
+                    cleaned_voice[key] = new_voice[key]
+            self.memory_data["learned_voice"] = cleaned_voice
+
+        if isinstance(new_threads, list):
+            merged = []
+            # Prefer the model's consolidated list, but sanitize shape and
+            # preserve a bounded history of both open and recently resolved threads.
+            for item in new_threads:
+                if isinstance(item, str):
+                    item = {"summary": item, "status": "open", "importance": 5}
+                if not isinstance(item, dict):
+                    continue
+                thread_summary = " ".join(str(item.get("summary") or "").split()).strip()
+                if not thread_summary:
+                    continue
+                try:
+                    importance = max(1, min(10, int(item.get("importance", 5))))
+                except Exception:
+                    importance = 5
+                status = str(item.get("status") or "open").casefold()
+                if status == "open": status = "active"
+                if status not in ("active", "waiting", "resolved", "abandoned"):
+                    status = "active"
+                participants_list = item.get("participants") if isinstance(item.get("participants"), list) else []
+                merged.append({
+                    "id": str(item.get("id") or uuid.uuid4().hex[:12]),
+                    "summary": thread_summary,
+                    "status": status,
+                    "importance": importance,
+                    "participants": [str(x)[:100] for x in participants_list[:10]],
+                    "private": bool(item.get("private", False)),
+                    "updated": stamp,
+                })
+            # If the model omitted an older open thread, preserve it unless
+            # an exact matching summary was returned in the new consolidation.
+            new_keys = {str(item.get("summary", "")).casefold() for item in merged}
+            for old_item in story_threads:
+                if not isinstance(old_item, dict):
+                    continue
+                old_summary = " ".join(str(old_item.get("summary") or "").split()).strip()
+                if not old_summary or old_summary.casefold() in new_keys:
+                    continue
+                if old_item.get("manual") or str(old_item.get("status", "active")).casefold() in ("open", "active", "waiting"):
+                    preserved = dict(old_item)
+                    preserved.setdefault("updated", stamp)
+                    merged.append(preserved)
+                    new_keys.add(old_summary.casefold())
+            thread_limit = max(10, int(self.settings.get("story_thread_limit", 30)))
+            merged.sort(
+                key=lambda item: (
+                    str(item.get("status", "open")).casefold() != "open",
+                    -int(item.get("importance", 0) or 0),
+                    str(item.get("updated", "")),
+                )
+            )
+            self.memory_data["story_threads"] = merged[:thread_limit]
+
+        # Alpha4: append significant events and preserve active/manual commitments.
+        # Adaptive Characters: correction preferences are learned from actual
+        # draft edits; development remains pending until explicit player approval.
+        if isinstance(new_correction_preferences, dict):
+            cleaned_cp = {
+                "summary": str(new_correction_preferences.get("summary") or "").strip(),
+                "prefer": [str(x).strip() for x in (new_correction_preferences.get("prefer") or []) if str(x).strip()][:12],
+                "avoid": [str(x).strip() for x in (new_correction_preferences.get("avoid") or []) if str(x).strip()][:12],
+            }
+            if cleaned_cp["summary"] or cleaned_cp["prefer"] or cleaned_cp["avoid"]:
+                self.memory_data["correction_preferences"] = cleaned_cp
+        if isinstance(new_development_proposals, list):
+            pending=self.memory_data.setdefault("development_proposals", [])
+            approved_fps={self._development_fingerprint(x) for x in self.approved_development_items()}
+            rejected_fps=set(self.memory_data.get("rejected_development", []))
+            existing_fps={self._development_fingerprint(x) for x in pending if isinstance(x,dict)}
+            for raw_item in new_development_proposals:
+                if not isinstance(raw_item,dict): continue
+                statement=str(raw_item.get("statement") or "").strip()
+                if not statement: continue
+                confidence=max(1,min(10,int(raw_item.get("confidence",5) or 5)))
+                # Keep the review queue meaningful; weak/one-off observations
+                # should not become development proposals.
+                if confidence < 7:
+                    continue
+                item={
+                    "id": uuid.uuid4().hex[:12],
+                    "area": str(raw_item.get("area") or "general").strip().lower(),
+                    "statement": statement,
+                    "evidence": str(raw_item.get("evidence") or "").strip(),
+                    "confidence": confidence,
+                    "status": "pending",
+                    "created": datetime.now().isoformat(timespec="seconds"),
+                }
+                fp=self._development_fingerprint(item)
+                if fp in approved_fps or fp in rejected_fps or fp in existing_fps: continue
+                pending.append(item); existing_fps.add(fp)
+            self.memory_data["development_proposals"] = pending[-40:]
+
+        self._ensure_continuity_ids()
+        if isinstance(new_shared_with_players, dict):
+            shared_store = self.memory_data.setdefault("shared_with_players", {})
+            if not isinstance(shared_store, dict):
+                shared_store = {}
+            for person, entries in new_shared_with_players.items():
+                person = str(person or "").strip()
+                if not person or not is_likely_relationship_character(person, confirmed_relationship_names):
+                    continue
+                if not isinstance(entries, list):
+                    continue
+                bucket = shared_store.setdefault(person, [])
+                if not isinstance(bucket, list):
+                    bucket = []
+                seen = {str(x.get("fact", "")).strip().casefold() for x in bucket if isinstance(x, dict)}
+                for raw in entries:
+                    if not isinstance(raw, dict):
+                        continue
+                    fact = str(raw.get("fact") or "").strip()
+                    if not fact or fact.casefold() in seen:
+                        continue
+                    bucket.append({"id": uuid.uuid4().hex, "fact": fact, "private": bool(raw.get("private", False)), "source": str(raw.get("source") or "conversation"), "updated": datetime.now().isoformat(timespec="seconds")})
+                    seen.add(fact.casefold())
+                shared_store[person] = bucket[-40:]
+            self.memory_data["shared_with_players"] = shared_store
+
+        if isinstance(new_continuity_events, list):
+            events_store = self.memory_data.setdefault("continuity_events", [])
+            existing = {str(x.get("summary","")).casefold() for x in events_store if isinstance(x,dict)}
+            for item in new_continuity_events:
+                if isinstance(item,str): item={"summary":item}
+                if not isinstance(item,dict): continue
+                summary=" ".join(str(item.get("summary") or "").split()).strip()
+                if not summary or summary.casefold() in existing: continue
+                try: importance=max(1,min(10,int(item.get("importance",5))))
+                except Exception: importance=5
+                events_store.append({"id":uuid.uuid4().hex[:12],"summary":summary[:800],"status":"recorded","importance":importance,
+                    "participants":[str(x)[:100] for x in (item.get("participants") or [])[:12]] if isinstance(item.get("participants"),list) else [],
+                    "private":bool(item.get("private",False)),"timestamp":stamp,"updated":stamp})
+                existing.add(summary.casefold())
+            self.memory_data["continuity_events"] = events_store[-200:]
+        if isinstance(new_commitments, list):
+            old=self.memory_data.setdefault("commitments", [])
+            by_summary={str(x.get("summary","")).casefold():x for x in old if isinstance(x,dict)}
+            for item in new_commitments:
+                if isinstance(item,str): item={"summary":item}
+                if not isinstance(item,dict): continue
+                summary=" ".join(str(item.get("summary") or "").split()).strip()
+                if not summary: continue
+                key=summary.casefold(); current=by_summary.get(key)
+                if current and current.get("manual"): continue
+                try: importance=max(1,min(10,int(item.get("importance",5))))
+                except Exception: importance=5
+                status=str(item.get("status") or "active").casefold()
+                if status not in ("active","waiting","fulfilled","cancelled"): status="active"
+                record={"id":str((current or {}).get("id") or uuid.uuid4().hex[:12]),"summary":summary[:800],"status":status,"importance":importance,
+                    "participants":[str(x)[:100] for x in (item.get("participants") or [])[:12]] if isinstance(item.get("participants"),list) else [],
+                    "direction":str(item.get("direction") or "other")[:120],"due":str(item.get("due") or "")[:120],
+                    "private":bool(item.get("private",False)),"updated":stamp}
+                if current:
+                    current.update(record)
+                else:
+                    old.append(record); by_summary[key]=record
+            self.memory_data["commitments"] = old[-100:]
+
+        if isinstance(new_emotional_state, dict) and new_emotional_state:
+            cleaned_state = {
+                "summary": " ".join(str(new_emotional_state.get("summary") or "").split())[:800],
+                "emotions": [str(x)[:80] for x in (new_emotional_state.get("emotions") or [])[:8]] if isinstance(new_emotional_state.get("emotions"), list) else [],
+                "toward": {str(k)[:100]: str(v)[:240] for k, v in list((new_emotional_state.get("toward") or {}).items())[:12]} if isinstance(new_emotional_state.get("toward"), dict) else {},
+                "updated": stamp,
+            }
+            if cleaned_state["summary"] or cleaned_state["emotions"] or cleaned_state["toward"]:
+                self.memory_data["emotional_state"] = cleaned_state
+
+        if isinstance(new_knowledge, list):
+            self._ensure_knowledge_ids()
+            old_knowledge = self.character_knowledge_items(include_dm_only=True)
+            protected = [x for x in old_knowledge if x.get("privacy") == "dm_only" or x.get("manual")]
+            protected_facts = {
+                " ".join(str(x.get("fact") or "").split()).strip().casefold()
+                for x in protected if str(x.get("fact") or "").strip()
+            }
+            cleaned_knowledge = []
+            seen_facts = set(protected_facts)
+            for item in new_knowledge:
+                if isinstance(item, str):
+                    item = {"fact": item}
+                if not isinstance(item, dict):
+                    continue
+                fact = " ".join(str(item.get("fact") or "").split()).strip()
+                if not fact:
+                    continue
+                key = fact.casefold()
+                if key in seen_facts:
+                    continue
+                seen_facts.add(key)
+                privacy = str(item.get("privacy") or "character").casefold()
+                if privacy not in ("public", "shared", "character", "private"):
+                    privacy = "character"
+                confidence = str(item.get("confidence") or "known").casefold()
+                if confidence not in ("known", "believed", "uncertain", "rumor"):
+                    confidence = "known"
+                cleaned_knowledge.append({
+                    "id": str(item.get("id") or uuid.uuid4().hex[:12]),
+                    "fact": fact[:600],
+                    "privacy": privacy,
+                    "source": str(item.get("source") or "conversation")[:120],
+                    "confidence": confidence,
+                    "updated": stamp,
+                })
+            # Preserve older knowledge the model did not repeat. This makes
+            # knowledge cumulative/upgradable instead of replacement-only.
+            for old_item in old_knowledge:
+                if old_item.get("privacy") == "dm_only" or old_item.get("manual"):
+                    continue
+                old_fact = " ".join(str(old_item.get("fact") or "").split()).strip()
+                if old_fact and old_fact.casefold() not in seen_facts:
+                    cleaned_knowledge.append(old_item)
+                    seen_facts.add(old_fact.casefold())
+            # Manual and DM-only entries are authoritative user/DM edits. The
+            # summarizer may add new IC knowledge, but cannot silently overwrite them.
+            self.memory_data["character_knowledge"] = (protected + cleaned_knowledge)[-80:]
+
+
+    def _summarize_and_remember(self, events=None):
+        # The durable journal, not an in-memory slice, owns pending work.
+        if not self.settings.get("memory_enabled", True) or not self._summary_lock.acquire(False):
+            return
+        self.summary_in_progress = True
+        try:
+            with storage.LOCK:
+                saved_memory, saved_summary = load_persistent_memory(self.settings)
+                if saved_memory.get("_last_summary_batch") != self.memory_data.get("_last_summary_batch"):
+                    self.memory_data, self.running_summary = saved_memory, saved_summary
+                batch = self.summary_journal.begin(self.memory_data.get("_last_summary_batch"))
+                if not batch:
+                    return
+                view = copy.copy(self)
+                view.memory_data = copy.deepcopy(self.memory_data)
+            parsed = batch["response"]
+            if parsed is None:
+                instructions, prompt = view._summary_prompt(batch["events"])
+                with self.request_lock:
+                    raw = self.request_ai(
+                        instructions,
+                        prompt,
+                        AIRequestPurpose.SUMMARY,
+                    ).text
+                parsed = extract_json_object(raw)
+                if not isinstance(parsed, dict) or not isinstance(parsed.get("summary"), str):
+                    raise ValueError("Invalid summary response; pending events retained")
+                self.summary_journal.cache_response(batch["id"], parsed)
+            with storage.LOCK:
+                # Merge against the latest memory, including edits made while
+                # the request was running. Apply on a copy; failures cannot
+                # leak partially applied results into later memory saves.
+                view = copy.copy(self)
+                view.memory_data = copy.deepcopy(self.memory_data)
+                view._apply_summary_response(batch["events"], parsed)
+                view.memory_data["_last_summary_batch"] = batch["id"]
+                try:
+                    save_persistent_memory(self.settings, view.memory_data, view.running_summary)
+                except Exception:
+                    self.memory_data, self.running_summary = load_persistent_memory(self.settings)
+                    raise
+                self.memory_data, self.running_summary = view.memory_data, view.running_summary
+                self.summary_journal.acknowledge(batch["id"])
+            archive_session_summary(self.settings, self.running_summary)
+            print("[MEMORY] Pending summary committed safely.")
+        except Exception as exc:
+            print(f"[MEMORY ERROR] {type(exc).__name__}: {exc}. Pending work will resume on next Start or Summarize Now.")
+        finally:
+            try:
+                self.summary_event_buffer = self.summary_journal.events()
+            finally:
+                self.summary_in_progress = False
+                self._summary_lock.release()
+
+    def flush_memory_summary(self):
+        self._summarize_and_remember()
+
+    def _response_length_target(self):
+        mode = str(self.settings.get("response_length_mode", "Auto") or "Auto").title()
+        hard_max = int(self.settings.get("max_reply_characters", 430))
+        if mode == "Brief":
+            return min(hard_max, 220), "brief and direct"
+        if mode == "Normal":
+            return min(hard_max, 340), "moderately concise"
+        if mode == "Detailed":
+            return hard_max, "as detailed and expressive as the live scene reasonably needs"
+
+        # Auto: infer from the latest incoming RP line. Short banter stays short;
+        # longer questions/exposition are allowed more room.
+        latest = self.last_external_event or {}
+        msg = str(latest.get("message", ""))
+        if len(msg) < 80 and "?" not in msg:
+            return min(hard_max, 220), "brief because the current exchange is short"
+        if len(msg) < 190:
+            return min(hard_max, 340), "natural conversational length"
+        return hard_max, "detailed enough to address the longer exchange"
+
+    def generate_reply(self, draft_instruction="", language=None):
+        if not self.context and not draft_instruction:
+            print("[AI] No chat context yet.")
+            return None
+
+        prompt = self.build_context_text()
+
+        # Guidance may come from either the small Guidance window or the
+        # console command. The shared file lets both interfaces stay in sync.
+        shared_guidance = read_shared_guidance()
+        guidance = shared_guidance or self.next_guidance.strip()
+        if guidance:
+            prompt += (
+                "\n\nPLAYER GUIDANCE:\n"
+                + guidance
+                + "\nFollow this guidance while staying fully in character. "
+                  "Do not mention or reveal the guidance itself."
+            )
+
+        if draft_instruction:
+            prompt += (
+                "\n\nDRAFT REVISION INSTRUCTION:\n"
+                + draft_instruction
+                + "\nFollow this instruction without mentioning it."
+            )
+
+        target_characters, length_guidance = self._response_length_target()
+        server_rules = load_server_roleplay_rules(
+            self.settings.get("server_profile", "AUTO")
+        )
+        rules_block = (
+            "\n\nSERVER RESPONSE RULES (follow these for this server):\n" + server_rules
+            if server_rules else ""
+        )
+        instructions = f"""{self.character_prompt}{rules_block}
+
+You are assisting live roleplay in {GAME_VERSIONS.get(self.settings.get("game_version", "nwn_ee"), "Neverwinter Nights")}.
+
+Write the draft in {language or self.settings.get("user_language", "English")} so the player can review and edit it before posting.
+
+Output exactly ONE in-character chat entry suitable for sending directly into NWN.
+You may combine spoken dialogue and a short emote in the same entry.
+Do not include labels such as SAY:, RESPONSE:, or a character-name prefix.
+Do not mention AI, prompts, logs, automation, or game mechanics.
+Do not answer ambient speech unless it reasonably appears relevant to the ongoing conversation.
+If there is genuinely nothing appropriate to say, output exactly: <NO_REPLY>
+Aim for a {length_guidance} response and keep it under {target_characters} characters.
+"""
+
+        self.last_ai_context_display = (
+            "=== CHARACTER / SYSTEM INSTRUCTIONS ===\n"
+            + instructions.strip()
+            + "\n\n=== CONTENT SENT FOR THIS REPLY ===\n"
+            + prompt.strip()
+        )
+        self.last_ai_context_version += 1
+
+        with self.request_lock:
+            try:
+                print("[AI] Generating...")
+                result = self.request_ai(
+                    instructions,
+                    prompt,
+                    AIRequestPurpose.REPLY,
+                )
+                reply = result.text
+                self.last_generation_seconds = result.duration_seconds
+                self.last_generation_model = result.model
+                self.last_generation_timestamp = time.time()
+                if self.settings.get("generation_timing", True):
+                    print(
+                        f"[AI TIMING] {self.last_generation_seconds:.2f}s "
+                        f"using {self.last_generation_model}"
+                    )
+
+                if not reply or reply == "<NO_REPLY>":
+                    print("[AI] No reply suggested.")
+                    return None
+
+                reply = " ".join(reply.replace("\r", " ").replace("\n", " ").split())
+                reply = reply[: target_characters].strip()
+                print(f"[AI] {reply}")
+                if guidance:
+                    # Guidance now persists until the user explicitly clears it.
+                    self.next_guidance = guidance
+                return reply
+
+            except Exception as exc:
+                print(f"[AI ERROR] {exc}")
+                return None
+
+    def generate_candidates(self):
+        if not self.context:
+            print("[AI] No chat context yet.")
+            return []
+
+        count = max(2, min(5, int(self.settings.get("candidate_count", 3))))
+        prompt = self.build_context_text()
+        shared_guidance = read_shared_guidance()
+        guidance = shared_guidance or self.next_guidance.strip()
+        if guidance:
+            prompt += (
+                "\n\nPLAYER GUIDANCE FOR THESE REPLIES:\n" + guidance
+                + "\nFollow it while staying in character; never reveal the guidance."
+            )
+
+        target_characters, length_guidance = self._response_length_target()
+        server_rules = load_server_roleplay_rules(
+            self.settings.get("server_profile", "AUTO")
+        )
+        rules_block = (
+            "\n\nSERVER RESPONSE RULES (follow these for this server):\n" + server_rules
+            if server_rules else ""
+        )
+        instructions = f"""{self.character_prompt}{rules_block}
+
+You are assisting live roleplay in {GAME_VERSIONS.get(self.settings.get("game_version", "nwn_ee"), "Neverwinter Nights")}.
+Write every candidate in {self.settings.get("user_language", "English")} so the player can review it before translation.
+Generate {count} meaningfully different candidate replies for the same moment.
+Each candidate must be a single in-character NWN chat entry.
+Do not include speaker labels or wrap spoken dialogue in quotation marks.
+Do not mention AI, prompts, logs, automation, or game mechanics.
+Each candidate should be {length_guidance} and under {target_characters} characters.
+Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply 3"]}}
+"""
+        self.last_ai_context_display = (
+            "=== CHARACTER / SYSTEM INSTRUCTIONS ===\n" + instructions.strip()
+            + "\n\n=== CONTENT SENT FOR THIS REPLY ===\n" + prompt.strip()
+        )
+        self.last_ai_context_version += 1
+
+        with self.request_lock:
+            try:
+                print(f"[AI] Generating {count} candidate replies...")
+                raw = self.request_ai(
+                    instructions,
+                    prompt,
+                    AIRequestPurpose.CANDIDATES,
+                ).text
+                parsed=extract_json_object(raw)
+                values=parsed.get("candidates",[]) if isinstance(parsed,dict) else []
+                candidates=[]
+                for value in values:
+                    text=" ".join(str(value).replace("\r"," ").replace("\n"," ").split()).strip()
+                    if text and text != "<NO_REPLY>":
+                        candidates.append(text[:target_characters].strip())
+                candidates=candidates[:count]
+                if not candidates:
+                    print("[AI] No candidates returned.")
+                    return []
+                self.candidate_replies=candidates
+                self.candidate_version += 1
+                self._publish_draft(candidates[0])
+                if guidance:
+                    # Guidance is persistent by design. F8 candidate generation,
+                    # F9 quick replies, and revisions all use the same guidance
+                    # until the player explicitly presses Clear Guidance.
+                    self.next_guidance = guidance
+                print(f"[AI] {len(candidates)} candidates ready.")
+                return candidates
+            except Exception as exc:
+                print(f"[AI ERROR] Candidate generation failed: {exc}")
+                return []
+
+    def suggest(self, variant="normal"):
+        if variant == "normal" or variant == "regenerate":
+            return self.generate_candidates()
+
+        instruction = ""
+        if variant == "regenerate":
+            instruction = (
+                "Generate a different in-character reply to the same situation. "
+                "Do not merely paraphrase the previous draft."
+            )
+        elif variant == "shorter":
+            instruction = (
+                "Make the reply noticeably shorter and more concise than the previous draft. "
+                f"Previous draft: {self.last_draft}"
+            )
+        elif variant == "longer":
+            instruction = (
+                "Make the reply somewhat longer and more expressive than the previous draft, "
+                "while still respecting the maximum reply length. "
+                f"Previous draft: {self.last_draft}"
+            )
+
+        reply = self.generate_reply(draft_instruction=instruction)
+        if reply:
+            self._publish_draft(reply)
+            print("\n--- AI DRAFT ---")
+            print(reply)
+            print("----------------\n")
+
+    def generate_and_send(self, source="manual"):
+        epoch = self._afk_epoch
+        if self.afk or self.stop_event.is_set() or (source == "auto" and (self.paused or not self.auto_reply)):
+            return
+        if is_wayland() and source != 'manual':
+            print('[MAC] Automatic sending is unavailable.')
+            return
+        reply = self.generate_reply()
+        if not reply or self.afk or epoch != self._afk_epoch or self.stop_event.is_set():
+            return
+
+        if is_wayland():
+            self._publish_draft(reply)
+            self.prepare_correction_candidate(reply, reply)
+            copy_draft(reply)
+            return
+
+        # F9/manual mode goes directly to NWN and should not alter the
+        # dedicated AI Draft box. F8 and the draft-variation controls own that box.
+
+        # F9/manual mode: give the user a moment to focus NWN before
+        # opening the chat bar and pasting the generated draft.
+        original_focus = self.settings.get("focus_game_before_typing", True)
+        if source == "manual":
+            self.prepare_correction_candidate(reply, reply)
+            print("[F9] Reply generated.")
+            print("[F9] Click/focus NWN now. Pasting in 2 seconds...")
+            time.sleep(2)
+            # The user has been explicitly asked to focus NWN. Avoid a
+            # SetForegroundWindow call from this background worker immediately
+            # afterward, because Windows may reject that focus steal.
+            self.settings["focus_game_before_typing"] = False
+
+        try:
+            if self.afk or epoch != self._afk_epoch or self.stop_event.is_set():
+                return
+            sent_ok = send_chat_to_nwn(
+                reply,
+                self.settings,
+                leave_unsent=(source == "manual"),
+            )
+        finally:
+            self.settings["focus_game_before_typing"] = original_focus
+
+        if sent_ok:
+            self.last_auto_reply_at = time.time()
+
+            if source == "manual":
+                print("[DRAFT] Response placed in NWN chat for editing.")
+            else:
+                print(f"[SEND] Sent ({source}).")
+
+            # F9 creates an editable draft. Do not record it as something the
+            # character actually said; the real edited/sent version will be
+            # picked up from the NWN log. Auto/F10 replies are actually sent,
+            # so record those immediately.
+            if source != "manual":
+                self.context.append({
+                    "speaker_id": "",
+                    "speaker": self.settings["character_name"],
+                    "channel": "Talk",
+                    "message": reply,
+                    "self": True,
+                    "_generated": True,
+                })
+
+
+    def paste_existing_draft(self, text):
+        text = " ".join((text or "").replace("\r", " ").replace("\n", " ").split()).strip()
+        if not text:
+            print("[DRAFT] No draft text to paste.")
+            return
+        text = text[: int(self.settings["max_reply_characters"])].strip()
+        if not self.pending_correction_draft:
+            self.prepare_correction_candidate(self.last_draft or text, text)
+        if is_wayland():
+            copy_draft(text)
+            return
+        print("[DRAFT] Click/focus NWN now. Pasting edited draft in 2 seconds...")
+        time.sleep(2)
+        original_focus = self.settings.get("focus_game_before_typing", True)
+        self.settings["focus_game_before_typing"] = False
+        try:
+            sent_ok = send_chat_to_nwn(text, self.settings, leave_unsent=True)
+        finally:
+            self.settings["focus_game_before_typing"] = original_focus
+        if sent_ok:
+            print("[DRAFT] Edited draft placed in NWN chat. Review it and press Enter yourself.")
+
+    def keyboard_test(self, force_method=None, manual_focus=False):
+        if is_wayland():
+            copy_draft('Role Weaver clipboard test - paste into NWN chat and press Escape to cancel.')
+            return
+        method = force_method or self.settings.get("keyboard_method", "clipboard")
+        test_text = f"NWN AI keyboard test ({method}) - visible but NOT sent."
+        print(f"[TEST] Keyboard test using: {method}")
+
+        original_focus = self.settings.get("focus_game_before_typing", True)
+
+        if manual_focus:
+            # Do not let the program change focus. The user places NWN in the
+            # foreground during the countdown, then we inject directly.
+            self.settings["focus_game_before_typing"] = False
+            manual_focus_countdown(5)
+
+        try:
+            ok = send_chat_to_nwn(
+                test_text,
+                self.settings,
+                leave_unsent=True,
+                force_method=method,
+            )
+        finally:
+            self.settings["focus_game_before_typing"] = original_focus
+
+        if ok:
+            print("[TEST] If you see the text in NWN, press Escape there to cancel it.")
+        else:
+            print("[TEST] This method failed before completing the test.")
+
+
+    def run_all_keyboard_tests(self):
+        print("[TEST] Running keyboard methods one at a time.")
+        print("[TEST] After each successful test, press Escape in NWN before continuing.")
+        for method in ("x11",):
+            input(f"\nPress ENTER here to test '{method}'...")
+            self.keyboard_test(force_method=method)
+
+
+    def toggle_pause(self):
+        self.paused = not self.paused
+        print(f"[MODE] {'PAUSED' if self.paused else 'LISTENING'}")
+
+    def afk_available(self):
+        return not is_wayland()
+
+    def send_afk(self, text):
+        return send_chat_to_nwn(text, self.settings, leave_unsent=False)
+
+    def toggle_auto(self):
+        # Compatibility for existing integrations; F10 now controls AFK.
+        self.toggle_afk()
+
+    def clear_context(self):
+        if self.settings.get("memory_enabled", True) and self.summary_event_buffer and not self.summary_in_progress:
+            threading.Thread(target=self.flush_memory_summary, daemon=True).start()
+        self.context.clear()
+        self.tell_contexts.clear()
+        self.ignored_context_ids.clear()
+        self.pinned_context_ids.clear()
+        self.current_area = ""
+        self.last_external_event = None
+        self.last_tell_partner = ""
+        print("[CONTEXT] Cleared.")
+
+    def should_suppress_duplicate_self(self, event):
+        if not event["self"] or not self.context:
+            return False
+        last = self.context[-1]
+        return (
+            last.get("_generated")
+            and last["message"].strip() == event["message"].strip()
+        )
+
+    def action_worker(self):
+        while not self.stop_event.is_set():
+            self.check_afk()
+            try:
+                action, source = self.action_queue.get(timeout=0.2)
+            except queue.Empty:
+                continue
+
+            if action == "keyboard_test":
+                self.keyboard_test()
+            elif action == "manual_keyboard_test":
+                self.keyboard_test(force_method="x11", manual_focus=True)
+            elif action == "all_keyboard_tests":
+                self.run_all_keyboard_tests()
+            elif action == "suggest":
+                self.suggest()
+            elif action == "draft_variant":
+                self.suggest(variant=source)
+            elif action == "revise_editor_draft":
+                self.revise_editor_draft(source)
+            elif action == "translate_chat":
+                self.translate_recent_chat(only_new=source == "new")
+            elif action == "translate_draft":
+                self.translate_draft(source)
+            elif action == "translate_game_draft":
+                self.translate_game_draft(source)
+            elif action == "generate_translation_draft":
+                self.generate_translation_draft()
+            elif action == "paste_existing_draft":
+                self.paste_existing_draft(source)
+            elif action == "generate_and_send":
+                self.generate_and_send(source=source)
+            elif action == "toggle_pause":
+                self.toggle_pause()
+            elif action == "toggle_auto":
+                self.toggle_auto()
+            elif action == "clear":
+                self.clear_context()
+            elif action == "quit":
+                self.stop_event.set()
+
+    def console_listener(self):
+        print()
+        print("Console commands are also available (use these if function keys are swallowed by NWN):")
+        print("  test       = test configured keyboard method")
+        print("  manualtest = 5-second countdown; click NWN, then scancode test")
+        print("  tests      = test the X11 clipboard input backend")
+        print("  speak      = generate + send one reply")
+        print("  draft      = generate draft only")
+        print("  guide <text> = set persistent guidance until cleared/replaced")
+        print("  guide?       = show queued guidance")
+        print("  guide clear  = clear queued guidance")
+        print("  afk        = toggle away-from-keyboard mode")
+        print("  pause      = pause/resume listening")
+        print("  clear      = clear context")
+        print("  quit       = quit")
+        print()
+
+        while not self.stop_event.is_set():
+            try:
+                raw_cmd = input("NWN-AI> ").strip()
+                cmd = raw_cmd.lower()
+            except (EOFError, KeyboardInterrupt):
+                return
+
+            if cmd == "guide?":
+                queued_guidance = read_shared_guidance() or self.next_guidance.strip()
+                if queued_guidance:
+                    print(f"[GUIDE] Queued: {queued_guidance}")
+                else:
+                    print("[GUIDE] No guidance queued.")
+            elif cmd == "guide clear":
+                self.next_guidance = ""
+                clear_shared_guidance()
+                print("[GUIDE] Cleared.")
+            elif cmd.startswith("guide "):
+                guidance = raw_cmd[6:].strip()
+                if guidance:
+                    self.next_guidance = guidance
+                    write_shared_guidance(guidance)
+                    print(f"[GUIDE] Persistent guidance: {guidance}")
+                else:
+                    print("[GUIDE] Usage: guide <instruction>")
+            elif cmd == "test":
+                self.action_queue.put(("keyboard_test", "console"))
+            elif cmd == "manualtest":
+                self.action_queue.put(("manual_keyboard_test", "console"))
+            elif cmd == "tests":
+                self.action_queue.put(("all_keyboard_tests", "console"))
+            elif cmd == "speak":
+                self.action_queue.put(("generate_and_send", "console"))
+            elif cmd == "draft":
+                self.action_queue.put(("suggest", "console"))
+            elif cmd in ("afk", "auto"):
+                self.toggle_afk()
+            elif cmd == "pause":
+                self.action_queue.put(("toggle_pause", "console"))
+            elif cmd == "clear":
+                self.action_queue.put(("clear", "console"))
+            elif cmd == "quit":
+                self.action_queue.put(("quit", "console"))
+                return
+            elif cmd:
+                print("[CONSOLE] Unknown command.")
+
+    def hotkey_listener(self):
+        if is_wayland():
+            print('[MAC] Use the on-screen controls. Global hotkeys and automatic game input are disabled.')
+            return None
+        from pynput import keyboard
+        def on_f6():
+            self.action_queue.put(("toggle_pause", "hotkey"))
+
+        def on_f7():
+            print("[HOTKEY] F7 detected")
+            self.action_queue.put(("keyboard_test", "hotkey"))
+
+        def on_f8():
+            self.action_queue.put(("suggest", "hotkey"))
+
+        def on_f9():
+            print("[HOTKEY] F9 detected")
+            self.action_queue.put(("generate_translation_draft", "manual"))
+
+        def on_f10():
+            print("[HOTKEY] F10 detected")
+            self.toggle_afk()
+
+        def on_f11():
+            self.action_queue.put(("clear", "hotkey"))
+
+        def on_f12():
+            self.action_queue.put(("quit", "hotkey"))
+
+        hotkeys = keyboard.GlobalHotKeys({
+            "<f6>": on_f6,
+            "<f7>": on_f7,
+            "<f8>": on_f8,
+            "<f9>": on_f9,
+            "<f10>": on_f10,
+            "<f11>": on_f11,
+            "<f12>": on_f12,
+        })
+        hotkeys.start()
+        return hotkeys
+
+    def run(self):
+        print("=" * 68)
+        print("Role Weaver: NWN & NWN2 AI Roleplay Client")
+        print("=" * 68)
+        print(f"Character : {self.settings['character_name']}")
+        print(f"Model     : {self.settings['model']}")
+        print(f"Log       : {self.settings['log_path']}")
+        print()
+        print("Hotkeys (work globally while NWN is focused):")
+        print("  F6   Pause/resume listening")
+        print("  F7   Keyboard test: open chat + type text, DO NOT send")
+        print("  F8   Generate a draft in this console only")
+        print("  F9   Generate a reply and send it to NWN")
+        print("  F10  Toggle AFK (away from keyboard)")
+        print("  F11  Clear conversation context")
+        print("  F12  Quit")
+        print()
+        print("Start NWN now. This program will wait for the client log.")
+        print("Auto-reply starts OFF unless settings.json says otherwise.")
+        print("=" * 68)
+
+        worker = threading.Thread(target=self.action_worker, daemon=True)
+        worker.start()
+        hotkeys = self.hotkey_listener()
+        console_thread = threading.Thread(target=self.console_listener, daemon=True)
+        console_thread.start()
+
+        follower = LogFollower(
+            self.settings["log_path"],
+            float(self.settings["poll_interval_seconds"]),
+        )
+
+        try:
+            for line in follower.lines(self.stop_event):
+                self.add_system_event(line)
+
+                event = parse_chat_line(
+                    line,
+                    self.settings["character_name"],
+                    self.settings.get("server_profile", "AUTO"),
+                    self.settings.get("parser_profile", "adaptive"),
+                    self.settings.get("game_version", "nwn_ee"),
+                )
+                if not event:
+                    continue
+
+                if self.should_suppress_duplicate_self(event):
+                    # Replace generated placeholder with authoritative log copy.
+                    self.context.pop()
+
+                self.add_chat_event(event)
+
+        except KeyboardInterrupt:
+            pass
+        finally:
+            self.stop_event.set()
+            try:
+                hotkeys.stop()
+            except Exception:
+                pass
+            print("\nStopped.")
+
+
+def main():
+    from mac_platform import require_desktop
+    require_desktop()
+
+    settings = load_settings()
+    character_prompt = load_character_prompt()
+
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        print("OPENAI_API_KEY is not set.")
+        print("Paste your OpenAI API key below. It is used for this run only.")
+        api_key = getpass.getpass("API key: ").strip()
+
+    if not api_key:
+        print("No API key supplied.")
+        sys.exit(1)
+
+    client = OpenAI(api_key=api_key)
+    bot = NWNAIBot(settings, character_prompt, client)
+    bot.run()
+
+
+if __name__ == "__main__":
+    main()

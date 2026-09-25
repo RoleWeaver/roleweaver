@@ -1,0 +1,5 @@
+openai>=1.0.0
+pyperclip>=1.8.2
+google-genai>=1.0.0
+guardrails-ai==0.11.0
+guardrails-ai-regex-match==0.1.0

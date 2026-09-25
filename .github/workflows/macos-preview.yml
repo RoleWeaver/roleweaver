@@ -1,0 +1,88 @@
+name: Build macOS preview
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "mac-v*-preview*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r macos/requirements.txt "pyinstaller>=6.0,<7"
+          python -m pip install --no-deps -e .
+      - name: Check source and platform behavior
+        run: |
+          python -m compileall -q macos src
+          python -m unittest discover -s tests -p 'test_mac*.py' -v
+          python -m unittest discover -s tests -p 'test_game*.py' -v
+          python -m unittest discover -s tests -p 'test_translation.py' -v
+      - name: Compile macOS app
+        run: |
+          python -m PyInstaller --noconfirm --clean --windowed --onedir \
+            --name RoleWeaver --paths src --paths macos \
+            --add-data "macos/assets:assets" \
+            --add-data "macos/Characters:Characters" \
+            --add-data "macos/Campaigns:Campaigns" \
+            --add-data "macos/Lore:Lore" \
+            --add-data "macos/RoleplayRules:RoleplayRules" \
+            --add-data "macos/VERSION:." \
+            macos/macos_start.py
+          test -x dist/RoleWeaver.app/Contents/MacOS/RoleWeaver
+          codesign --force --deep --sign - dist/RoleWeaver.app
+          codesign --verify --deep --strict dist/RoleWeaver.app
+      - name: Package app and checksums
+        run: |
+          version=$(cat VERSION)
+          test "$version" = "$(cat macos/VERSION)"
+          mkdir -p release
+          asset="RoleWeaver-v${version}-macOS-${{ matrix.arch }}.zip"
+          ditto -c -k --sequesterRsrc --keepParent dist/RoleWeaver.app "release/$asset"
+          shasum -a 256 "release/$asset" > "release/SHA256SUMS-macOS-${{ matrix.arch }}.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RoleWeaver-macOS-${{ matrix.arch }}
+          path: release/*
+          if-no-files-found: error
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/mac-v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - name: Verify matching source version
+        run: |
+          test "$GITHUB_REF_NAME" = "mac-v$(cat VERSION)-preview1"
+      - name: Publish preview downloads
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Role Weaver v1.3.1 macOS preview 1
+          prerelease: true
+          body_path: macos/RELEASE_NOTES_MACOS.md
+          files: release/*
+          fail_on_unmatched_files: true
