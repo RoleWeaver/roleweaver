@@ -521,10 +521,15 @@ class NWNAIApp:
         row2 = ttk.Frame(controls)
         row2.pack(fill="x", pady=(7, 0))
 
+        self.auto_send_btn = ttk.Button(
+            row2, text="Auto Send OFF", command=self.toggle_auto_send, state="disabled"
+        )
+        self.auto_send_btn.pack(side="left", fill="x", expand=True)
+
         self.auto_btn = ttk.Button(
             row2, text="AFK OFF (F10)", command=self.toggle_auto, state="disabled"
         )
-        self.auto_btn.pack(side="left", fill="x", expand=True)
+        self.auto_btn.pack(side="left", fill="x", expand=True, padx=(6, 0))
 
         self.draft_btn = ttk.Button(
             row2, text="Generate 3 Drafts (F8)", command=self.generate_draft, state="disabled"
@@ -558,7 +563,7 @@ class NWNAIApp:
 
         ttk.Label(
             controls,
-            text="macOS: use the buttons, then paste the editable game-language draft into NWN." if core.is_wayland() else "F8 creates candidates; F9 creates one reply. Translate, edit, then paste the game-language draft into NWN.",
+            text="macOS automatic input requires Accessibility and Automation access. Run Keyboard Test before enabling AFK. F8 drafts; F9 prepares an editable reply.",
             wraplength=320,
         ).pack(anchor="w", pady=(8, 0))
 
@@ -2950,6 +2955,7 @@ class NWNAIApp:
             self.start_btn.configure(state="disabled")
             self.stop_btn.configure(state="normal")
             self.pause_btn.configure(state="normal")
+            self.auto_send_btn.configure(state="normal")
             self.auto_btn.configure(state="disabled" if core.is_wayland() else "normal")
             self.draft_btn.configure(state="normal")
             self.f9_btn.configure(state="normal")
@@ -2975,6 +2981,7 @@ class NWNAIApp:
             self.start_btn.configure(state="normal")
             self.stop_btn.configure(state="disabled")
             self.pause_btn.configure(state="disabled")
+            self.auto_send_btn.configure(state="disabled")
             self.auto_btn.configure(state="disabled")
             self.draft_btn.configure(state="disabled")
             self.f9_btn.configure(state="disabled")
@@ -3011,6 +3018,12 @@ class NWNAIApp:
     def toggle_auto(self):
         if self.bot:
             self.bot.toggle_afk()
+
+    def toggle_auto_send(self):
+        if self.bot and not self.bot.afk:
+            self.bot.auto_reply = not self.bot.auto_reply
+            self.bot.pending_auto_token += 1
+            self._append_log(f"[AUTO SEND] {'ON' if self.bot.auto_reply else 'OFF'} for this session.")
 
     @staticmethod
     def _replace_draft_text(widget, text):
@@ -3800,6 +3813,10 @@ class NWNAIApp:
 
                 self.auto_btn.configure(
                     text="AFK unavailable (macOS)" if core.is_wayland() else ("AFK ON (F10)" if self.bot.afk else "AFK OFF (F10)")
+                )
+                self.auto_send_btn.configure(
+                    text="Auto Send ON" if self.bot.auto_reply else "Auto Send OFF",
+                    state="disabled" if self.bot.afk else "normal",
                 )
 
                 if self.bot.stop_event.is_set() and self.running:

@@ -52,7 +52,7 @@ import shutil
 
 import pyperclip
 from mac_platform import is_wayland, copy_draft
-# Import the hotkey backend only when starting it on X11.
+# Import the hotkey backend only when starting it on macOS.
 from openai import OpenAI
 
 
@@ -72,7 +72,7 @@ SERVER_PROFILES = {
     "AUTO": {"display_name": "Auto Detect", "default_log_path": DEFAULT_NWN_LOG_PATH},
 }
 
-DEFAULT_SETTINGS = default_settings(DEFAULT_NWN_LOG_PATH, keyboard_method="clipboard")
+DEFAULT_SETTINGS = default_settings(DEFAULT_NWN_LOG_PATH, keyboard_method="macos")
 
 
 def _safe_server_id(label):
@@ -1126,7 +1126,8 @@ class NWNAIBot(DraftWorkflowMixin, AFKMixin):
 
         self.stop_event = threading.Event()
         self.paused = bool(settings.get("start_paused", False))
-        self.auto_reply = bool(settings.get("auto_reply_on_start", False)) and not is_wayland()
+        # Require an explicit opt-in each session after the keyboard test.
+        self.auto_reply = False
 
         self.context = deque(maxlen=int(settings["context_messages"]))
         self.current_area = ""
@@ -3145,7 +3146,7 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
         if is_wayland():
             copy_draft('Role Weaver clipboard test - paste into NWN chat and press Escape to cancel.')
             return
-        method = force_method or self.settings.get("keyboard_method", "clipboard")
+        method = force_method or self.settings.get("keyboard_method", "macos")
         test_text = f"NWN AI keyboard test ({method}) - visible but NOT sent."
         print(f"[TEST] Keyboard test using: {method}")
 
@@ -3176,7 +3177,7 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
     def run_all_keyboard_tests(self):
         print("[TEST] Running keyboard methods one at a time.")
         print("[TEST] After each successful test, press Escape in NWN before continuing.")
-        for method in ("x11",):
+        for method in ("macos",):
             input(f"\nPress ENTER here to test '{method}'...")
             self.keyboard_test(force_method=method)
 
@@ -3227,7 +3228,7 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
             if action == "keyboard_test":
                 self.keyboard_test()
             elif action == "manual_keyboard_test":
-                self.keyboard_test(force_method="x11", manual_focus=True)
+                self.keyboard_test(force_method="macos", manual_focus=True)
             elif action == "all_keyboard_tests":
                 self.run_all_keyboard_tests()
             elif action == "suggest":
@@ -3262,7 +3263,7 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
         print("Console commands are also available (use these if function keys are swallowed by NWN):")
         print("  test       = test configured keyboard method")
         print("  manualtest = 5-second countdown; click NWN, then scancode test")
-        print("  tests      = test the X11 clipboard input backend")
+        print("  tests      = test the macOS game input backend")
         print("  speak      = generate + send one reply")
         print("  draft      = generate draft only")
         print("  guide <text> = set persistent guidance until cleared/replaced")
@@ -3325,7 +3326,6 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
         if is_wayland():
             print('[MAC] Use the on-screen controls. Global hotkeys and automatic game input are disabled.')
             return None
-        from pynput import keyboard
         def on_f6():
             self.action_queue.put(("toggle_pause", "hotkey"))
 
@@ -3350,17 +3350,23 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
         def on_f12():
             self.action_queue.put(("quit", "hotkey"))
 
-        hotkeys = keyboard.GlobalHotKeys({
-            "<f6>": on_f6,
-            "<f7>": on_f7,
-            "<f8>": on_f8,
-            "<f9>": on_f9,
-            "<f10>": on_f10,
-            "<f11>": on_f11,
-            "<f12>": on_f12,
-        })
-        hotkeys.start()
-        return hotkeys
+        try:
+            from pynput import keyboard
+
+            hotkeys = keyboard.GlobalHotKeys({
+                "<f6>": on_f6,
+                "<f7>": on_f7,
+                "<f8>": on_f8,
+                "<f9>": on_f9,
+                "<f10>": on_f10,
+                "<f11>": on_f11,
+                "<f12>": on_f12,
+            })
+            hotkeys.start()
+            return hotkeys
+        except Exception as exc:
+            print(f"[HOTKEYS] Unavailable: {exc}. Use the on-screen buttons.")
+            return None
 
     def run(self):
         print("=" * 68)

@@ -22,10 +22,69 @@ class MacPlatformTests(unittest.TestCase):
             self.assertEqual(paths[0], root / "Documents/Neverwinter Nights/logs")
             self.assertEqual(paths[1], root / "Library/Application Support/Neverwinter Nights/logs")
 
-    def test_clipboard_copy_is_not_a_send(self):
-        with patch.object(mac_platform, "copy_draft") as copy:
-            self.assertFalse(mac_platform.send_chat_to_nwn("Hello", {"max_reply_characters": 430}))
-            copy.assert_called_once_with("Hello")
+    def test_auto_send_opens_pastes_and_submits(self):
+        settings = {"window_title_contains": "Neverwinter Nights", "focus_game_before_typing": True}
+        with (
+            patch.object(mac_platform, "require_desktop"),
+            patch.object(mac_platform, "copy_draft") as copy,
+            patch.object(
+                mac_platform, "focus_nwn_window", return_value=(True, "Neverwinter Nights")
+            ),
+            patch.object(
+                mac_platform,
+                "get_foreground_window_title",
+                return_value=("42", "Neverwinter Nights"),
+            ),
+            patch.object(mac_platform, "_osascript") as script,
+            patch.object(mac_platform.time, "sleep"),
+        ):
+            self.assertTrue(mac_platform.send_chat_to_nwn("Hello", settings))
+        copy.assert_called_once_with("Hello")
+        self.assertEqual(
+            [call.args[0] for call in script.call_args_list],
+            [mac_platform._RETURN_SCRIPT, mac_platform._PASTE_SCRIPT, mac_platform._RETURN_SCRIPT],
+        )
+
+    def test_draft_pastes_without_submitting(self):
+        settings = {
+            "window_title_contains": "Neverwinter Nights",
+            "focus_game_before_typing": False,
+        }
+        with (
+            patch.object(mac_platform, "require_desktop"),
+            patch.object(mac_platform, "copy_draft"),
+            patch.object(
+                mac_platform,
+                "get_foreground_window_title",
+                return_value=("42", "Neverwinter Nights"),
+            ),
+            patch.object(mac_platform, "_osascript") as script,
+            patch.object(mac_platform.time, "sleep"),
+        ):
+            self.assertTrue(mac_platform.send_chat_to_nwn("Hello", settings, leave_unsent=True))
+        self.assertEqual(
+            [call.args[0] for call in script.call_args_list],
+            [mac_platform._RETURN_SCRIPT, mac_platform._PASTE_SCRIPT],
+        )
+
+    def test_focus_loss_stops_before_submit(self):
+        settings = {
+            "window_title_contains": "Neverwinter Nights",
+            "focus_game_before_typing": False,
+        }
+        front = [("42", "Neverwinter Nights")] * 3 + [("99", "TextEdit")]
+        with (
+            patch.object(mac_platform, "require_desktop"),
+            patch.object(mac_platform, "copy_draft"),
+            patch.object(mac_platform, "get_foreground_window_title", side_effect=front),
+            patch.object(mac_platform, "_osascript") as script,
+            patch.object(mac_platform.time, "sleep"),
+        ):
+            self.assertFalse(mac_platform.send_chat_to_nwn("Hello", settings))
+        self.assertEqual(
+            [call.args[0] for call in script.call_args_list],
+            [mac_platform._RETURN_SCRIPT, mac_platform._PASTE_SCRIPT],
+        )
 
     def test_user_data_outside_app_bundle(self):
         with patch.object(sys, "platform", "darwin"):

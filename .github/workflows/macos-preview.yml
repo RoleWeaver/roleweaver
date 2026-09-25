@@ -35,10 +35,28 @@ jobs:
           python -m compileall -q macos src
           python -m unittest discover -s tests -p 'test_mac*.py' -v
           python -m unittest discover -s tests -p 'test_translation.py' -v
+          PYTHONPATH=macos:src python - <<'PY'
+          import subprocess
+          import tempfile
+          from pathlib import Path
+          import mac_platform
+
+          with tempfile.TemporaryDirectory() as directory:
+              for index, script in enumerate((
+                  mac_platform._WINDOWS_SCRIPT, mac_platform._FRONT_SCRIPT,
+                  mac_platform._FOCUS_SCRIPT, mac_platform._RETURN_SCRIPT,
+                  mac_platform._PASTE_SCRIPT,
+              )):
+                  subprocess.run(
+                      ["osacompile", "-o", str(Path(directory) / f"script{index}.scpt"),
+                       "-e", script], check=True,
+                  )
+          PY
       - name: Compile macOS app
         run: |
           python -m PyInstaller --noconfirm --clean --windowed --onedir \
-            --name RoleWeaver --paths src --paths macos \
+            --name RoleWeaver --osx-bundle-identifier com.roleweaver.client \
+            --paths src --paths macos \
             --add-data "macos/assets:assets" \
             --add-data "macos/Characters:Characters" \
             --add-data "macos/Campaigns:Campaigns" \
@@ -47,6 +65,19 @@ jobs:
             --add-data "macos/VERSION:." \
             macos/macos_start.py
           test -x dist/RoleWeaver.app/Contents/MacOS/RoleWeaver
+          python - <<'PY'
+          import plistlib
+          from pathlib import Path
+
+          info = Path("dist/RoleWeaver.app/Contents/Info.plist")
+          with info.open("rb") as source:
+              data = plistlib.load(source)
+          data["NSAppleEventsUsageDescription"] = (
+              "Role Weaver uses System Events to paste and send approved NWN chat drafts."
+          )
+          with info.open("wb") as target:
+              plistlib.dump(data, target)
+          PY
           codesign --force --deep --sign - dist/RoleWeaver.app
           codesign --verify --deep --strict dist/RoleWeaver.app
       - name: Package app and checksums
