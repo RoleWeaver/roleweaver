@@ -169,7 +169,6 @@ class NWNAIApp:
 
         self.bot = None
         self.bot_thread = None
-        self.hotkeys = None
         self.running = False
         self.guidance_dirty = False
         self.last_guidance_file_value = None
@@ -514,7 +513,7 @@ class NWNAIApp:
         self.stop_btn.pack(side="left", fill="x", expand=True, padx=(6, 0))
 
         self.pause_btn = ttk.Button(
-            row1, text="Pause (F6)", command=self.toggle_pause, state="disabled"
+            row1, text="Pause", command=self.toggle_pause, state="disabled"
         )
         self.pause_btn.pack(side="left", fill="x", expand=True, padx=(6, 0))
 
@@ -527,18 +526,18 @@ class NWNAIApp:
         self.auto_send_btn.pack(side="left", fill="x", expand=True)
 
         self.auto_btn = ttk.Button(
-            row2, text="AFK OFF (F10)", command=self.toggle_auto, state="disabled"
+            row2, text="AFK OFF", command=self.toggle_auto, state="disabled"
         )
         self.auto_btn.pack(side="left", fill="x", expand=True, padx=(6, 0))
 
         self.draft_btn = ttk.Button(
-            row2, text="Generate 3 Drafts (F8)", command=self.generate_draft, state="disabled"
+            row2, text="Generate 3 Drafts", command=self.generate_draft, state="disabled"
         )
         self.draft_btn.pack(side="left", fill="x", expand=True, padx=(6, 0))
 
         self.f9_btn = ttk.Button(
             row2,
-            text="Generate + Translate (F9)",
+            text="Generate + Translate",
             command=self.generate_to_nwn,
             state="disabled",
             style="Accent.TButton",
@@ -550,7 +549,7 @@ class NWNAIApp:
 
         self.clear_btn = ttk.Button(
             row3,
-            text="Clear Conversation (F11)",
+            text="Clear Conversation",
             command=self.clear_context,
             state="disabled",
         )
@@ -563,7 +562,7 @@ class NWNAIApp:
 
         ttk.Label(
             controls,
-            text="macOS automatic input requires Accessibility and Automation access. Run Keyboard Test before enabling AFK. F8 drafts; F9 prepares an editable reply.",
+            text="macOS automatic input requires Accessibility and Automation access. Run Keyboard Test before enabling AFK or Auto Send. Use these buttons to control Role Weaver.",
             wraplength=320,
         ).pack(anchor="w", pady=(8, 0))
 
@@ -2832,8 +2831,6 @@ class NWNAIApp:
             self.bot.settings["response_length_mode"] = self.length_mode_var.get() or "Auto"
 
             threading.Thread(target=self.bot.action_worker, daemon=True).start()
-            self.hotkeys = self.bot.hotkey_listener()
-
             self.running = True
             self._set_running_controls(True)
             self.settings_lock_var.set("Settings locked while Role Weaver is running.")
@@ -2863,7 +2860,7 @@ class NWNAIApp:
             if core.read_shared_guidance():
                 self._append_log("[GUIDE] Persistent guidance is active and will remain until cleared.")
             self._refresh_history_files()
-            self._append_log("[HOTKEYS] F6 pause, F8 draft, F9 NWN draft, F10 AFK, F11 clear, F12 stop.")
+            self._append_log("[CONTROLS] Use the on-screen buttons for pause, drafts, AFK, Auto Send, and stop.")
 
             self.bot_thread = threading.Thread(target=self._log_loop, args=(self.bot,), daemon=True)
             self.bot_thread.start()
@@ -2925,11 +2922,6 @@ class NWNAIApp:
         except Exception:
             pass
         self.bot.stop_event.set()
-        try:
-            if self.hotkeys:
-                self.hotkeys.stop()
-        except Exception:
-            pass
         self.running = False
         self._set_running_controls(False)
         self.settings_lock_var.set("")
@@ -3807,12 +3799,12 @@ class NWNAIApp:
                     self.timing_var.set("AI: —")
 
                 if self.bot.paused:
-                    self.pause_btn.configure(text="Resume Listening (F6)")
+                    self.pause_btn.configure(text="Resume Listening")
                 else:
-                    self.pause_btn.configure(text="Pause Listening (F6)")
+                    self.pause_btn.configure(text="Pause Listening")
 
                 self.auto_btn.configure(
-                    text="AFK unavailable (macOS)" if core.is_wayland() else ("AFK ON (F10)" if self.bot.afk else "AFK OFF (F10)")
+                    text="AFK unavailable (macOS)" if core.is_wayland() else ("AFK ON" if self.bot.afk else "AFK OFF")
                 )
                 self.auto_send_btn.configure(
                     text="Auto Send ON" if self.bot.auto_reply else "Auto Send OFF",

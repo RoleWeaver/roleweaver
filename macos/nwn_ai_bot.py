@@ -3322,52 +3322,6 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
             elif cmd:
                 print("[CONSOLE] Unknown command.")
 
-    def hotkey_listener(self):
-        if is_wayland():
-            print('[MAC] Use the on-screen controls. Global hotkeys and automatic game input are disabled.')
-            return None
-        def on_f6():
-            self.action_queue.put(("toggle_pause", "hotkey"))
-
-        def on_f7():
-            print("[HOTKEY] F7 detected")
-            self.action_queue.put(("keyboard_test", "hotkey"))
-
-        def on_f8():
-            self.action_queue.put(("suggest", "hotkey"))
-
-        def on_f9():
-            print("[HOTKEY] F9 detected")
-            self.action_queue.put(("generate_translation_draft", "manual"))
-
-        def on_f10():
-            print("[HOTKEY] F10 detected")
-            self.toggle_afk()
-
-        def on_f11():
-            self.action_queue.put(("clear", "hotkey"))
-
-        def on_f12():
-            self.action_queue.put(("quit", "hotkey"))
-
-        try:
-            from pynput import keyboard
-
-            hotkeys = keyboard.GlobalHotKeys({
-                "<f6>": on_f6,
-                "<f7>": on_f7,
-                "<f8>": on_f8,
-                "<f9>": on_f9,
-                "<f10>": on_f10,
-                "<f11>": on_f11,
-                "<f12>": on_f12,
-            })
-            hotkeys.start()
-            return hotkeys
-        except Exception as exc:
-            print(f"[HOTKEYS] Unavailable: {exc}. Use the on-screen buttons.")
-            return None
-
     def run(self):
         print("=" * 68)
         print("Role Weaver: NWN & NWN2 AI Roleplay Client")
@@ -3376,14 +3330,7 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
         print(f"Model     : {self.settings['model']}")
         print(f"Log       : {self.settings['log_path']}")
         print()
-        print("Hotkeys (work globally while NWN is focused):")
-        print("  F6   Pause/resume listening")
-        print("  F7   Keyboard test: open chat + type text, DO NOT send")
-        print("  F8   Generate a draft in this console only")
-        print("  F9   Generate a reply and send it to NWN")
-        print("  F10  Toggle AFK (away from keyboard)")
-        print("  F11  Clear conversation context")
-        print("  F12  Quit")
+        print("Use the on-screen controls in the macOS app.")
         print()
         print("Start NWN now. This program will wait for the client log.")
         print("Auto-reply starts OFF unless settings.json says otherwise.")
@@ -3391,7 +3338,6 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
 
         worker = threading.Thread(target=self.action_worker, daemon=True)
         worker.start()
-        hotkeys = self.hotkey_listener()
         console_thread = threading.Thread(target=self.console_listener, daemon=True)
         console_thread.start()
 
@@ -3424,10 +3370,6 @@ Return STRICT JSON only in this form: {{"candidates":["reply 1","reply 2","reply
             pass
         finally:
             self.stop_event.set()
-            try:
-                hotkeys.stop()
-            except Exception:
-                pass
             print("\nStopped.")
 
 

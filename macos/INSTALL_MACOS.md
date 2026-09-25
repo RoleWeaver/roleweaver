@@ -23,7 +23,7 @@ Double-click `RoleWeaver.app` in Applications. This preview is ad hoc signed and
 1. Open **System Settings → Privacy & Security → Accessibility** and allow `RoleWeaver`. If it is not listed, add `RoleWeaver.app` from Applications. See [Apple's Accessibility instructions](https://support.apple.com/en-gu/guide/mac-help/mh43185/mac).
 2. When macOS asks whether RoleWeaver may control **System Events**, choose **Allow**. If you previously denied it, review **System Settings → Privacy & Security → Automation**. See [Apple's Automation instructions](https://support.apple.com/en-mz/guide/mac-help/mchl108e1718/mac).
 3. With NWN running, click **Keyboard Test** in Role Weaver. Switch to the NWN window during the countdown. The test should open chat and paste a line **without sending it**. Press **Escape** in NWN to discard the line. If the test fails, leave Auto Send and AFK off and check the activity message and permissions.
-4. Once the test succeeds, use **Auto Send OFF** to enable automatic replies or **AFK OFF (F10)** to enable AFK emotes. Both modes start off each session. Use the on-screen buttons if function-key hotkeys do not work; hotkeys may need **Input Monitoring** permission and the Mac's function-key setting.
+4. Once the test succeeds, use **Auto Send OFF** to enable automatic replies or **AFK OFF** to enable AFK emotes. Both modes start off each session. Use the on-screen buttons; global function-key hotkeys are disabled in this preview.
 
 ## If something does not work
 
