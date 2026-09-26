@@ -1,0 +1,141 @@
+name: Build macOS preview
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "mac-v*-preview*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [[ "${{ matrix.arch }}" == x86_64 ]]; then
+            # cryptography 50 has no Intel macOS wheel. Build against a single,
+            # statically linked OpenSSL to avoid a mismatched bundled libssl.
+            export OPENSSL_DIR="$(brew --prefix openssl@3)"
+            export OPENSSL_STATIC=1
+            python -m pip install --no-cache-dir --no-binary cryptography \
+              -r macos/requirements.txt "pyinstaller>=6.0,<7"
+          else
+            python -m pip install -r macos/requirements.txt "pyinstaller>=6.0,<7"
+          fi
+          python -m pip install --no-deps -e .
+      - name: Check source and platform behavior
+        run: |
+          python -m compileall -q macos src
+          python -m unittest discover -s tests -p 'test_mac*.py' -v
+          python -m unittest discover -s tests -p 'test_translation.py' -v
+          PYTHONPATH=macos:src python - <<'PY'
+          import subprocess
+          import tempfile
+          from pathlib import Path
+          import mac_platform
+
+          with tempfile.TemporaryDirectory() as directory:
+              for index, script in enumerate((
+                  mac_platform._WINDOWS_SCRIPT, mac_platform._FRONT_SCRIPT,
+                  mac_platform._FOCUS_SCRIPT, mac_platform._RETURN_SCRIPT,
+                  mac_platform._PASTE_SCRIPT,
+              )):
+                  subprocess.run(
+                      ["osacompile", "-o", str(Path(directory) / f"script{index}.scpt"),
+                       "-e", script], check=True,
+                  )
+          PY
+      - name: Compile macOS app
+        run: |
+          python -m PyInstaller --noconfirm --clean --windowed --onedir \
+            --name RoleWeaver --osx-bundle-identifier com.roleweaver.client \
+            --paths src --paths macos \
+            --collect-all guardrails \
+            --collect-all guardrails_ai.regex_match \
+            --collect-all rfc3987_syntax \
+            --add-data "macos/assets:assets" \
+            --add-data "macos/Characters:Characters" \
+            --add-data "macos/Campaigns:Campaigns" \
+            --add-data "macos/Lore:Lore" \
+            --add-data "macos/RoleplayRules:RoleplayRules" \
+            --add-data "macos/VERSION:." \
+            macos/macos_start.py
+          test -x dist/RoleWeaver.app/Contents/MacOS/RoleWeaver
+          python - <<'PY'
+          import plistlib
+          from pathlib import Path
+
+          info = Path("dist/RoleWeaver.app/Contents/Info.plist")
+          with info.open("rb") as source:
+              data = plistlib.load(source)
+          data["NSAppleEventsUsageDescription"] = (
+              "Role Weaver uses System Events to paste and send approved NWN chat drafts."
+          )
+          with info.open("wb") as target:
+              plistlib.dump(data, target)
+          PY
+          codesign --force --deep --sign - dist/RoleWeaver.app
+          codesign --verify --deep --strict dist/RoleWeaver.app
+      - name: Verify packaged Guardrails AI
+        run: |
+          grammar=$(find dist/RoleWeaver.app -path '*/rfc3987_syntax/syntax_rfc3987.lark' -type f -print -quit)
+          test -n "$grammar"
+          smoke_result=$(mktemp "$RUNNER_TEMP/roleweaver-guardrails.XXXXXX")
+          if ! dist/RoleWeaver.app/Contents/MacOS/RoleWeaver --guardrails-smoke "$smoke_result"; then
+            cat "$smoke_result"
+            exit 1
+          fi
+          test "$(cat "$smoke_result")" = active
+      - name: Package app and checksums
+        run: |
+          version=$(cat VERSION)
+          test "$version" = "$(cat macos/VERSION)"
+          mkdir -p release
+          asset="RoleWeaver-v${version}-macOS-${{ matrix.arch }}.zip"
+          ditto -c -k --sequesterRsrc --keepParent dist/RoleWeaver.app "release/$asset"
+          shasum -a 256 "release/$asset" > "release/SHA256SUMS-macOS-${{ matrix.arch }}.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RoleWeaver-macOS-${{ matrix.arch }}
+          path: release/*
+          if-no-files-found: error
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/mac-v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - name: Verify matching source version
+        run: |
+          [[ "$GITHUB_REF_NAME" =~ ^mac-v$(cat VERSION)-preview[0-9]+$ ]]
+          cp macos/INSTALL_MACOS.md release/INSTALL_MACOS.md
+      - name: Publish preview downloads
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Role Weaver ${{ github.ref_name }}
+          prerelease: true
+          body_path: macos/RELEASE_NOTES_MACOS.md
+          files: release/*
+          fail_on_unmatched_files: true
