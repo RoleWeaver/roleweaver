@@ -1,10 +1,10 @@
-# Role Weaver 1.3.1 — Linux installation
+# Role Weaver 1.3.2 — Linux installation
 
 Supports NWN and NWN2 editions. Native NWN:EE uses its user-data logs; classic
 installations and NWN2 through Wine/Proton may require custom log selection.
 
-Download **RoleWeaver-v1.3.1-Linux.tar.gz** from the
-[v1.3.1 release](https://github.com/RoleWeaver/roleweaver/releases/tag/v1.3.1).
+Download **RoleWeaver-v1.3.2-Linux.tar.gz** from the
+[v1.3.2 release](https://github.com/RoleWeaver/roleweaver/releases/tag/v1.3.2).
 Extract into a writable folder. In a full repository checkout, use linux/;
 the Linux release archive already contains the client root.
 
@@ -39,7 +39,7 @@ for native, Wine/Proton and NWN2 EE 64-bit paths.
 ## Updating and recovery
 
 Version 1.2.3 has no Updates tab, so upgrading from it requires a manual
-download. Version 1.3.0 can discover and download v1.3.1 from the Updates tab.
+download. Versions 1.3.0 and 1.3.1 can discover v1.3.2 from the Updates tab.
 
 From a version with an **Updates** tab, use **Check for Updates**, then
 **Download Update** and **Prepare New Folder**. The new folder receives a copy
@@ -58,4 +58,4 @@ See [BACKUP_RECOVERY.md](BACKUP_RECOVERY.md) and
 
     .venv/bin/python -m unittest discover -s tests
 
-Follow [TESTING_v1.3.1.md](TESTING_v1.3.1.md) for live-game, translation and update checks.
+Follow [TESTING_v1.3.2.md](TESTING_v1.3.2.md) for live-game, translation and update checks.

@@ -1,3 +1,8 @@
+## 1.3.2 — Windows Guardrails packaging fix
+
+- Restore Guardrails AI availability in the Windows packaged client by bundling
+  a missing dependency grammar file; Linux client behavior is unchanged.
+
 ## 1.3.1 — Draft workflow and game-text maintenance
 
 - Refine either editable draft in its own language and clear each editor independently.

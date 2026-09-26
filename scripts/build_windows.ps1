@@ -29,8 +29,8 @@ $addData = @(
     "--add-data=PLAYER_GUIDE.md;.",
     "--add-data=DM_GUIDE.md;.",
     "--add-data=AUTOMATIC_LOG_DETECTION.md;.",
-    "--add-data=RELEASE_NOTES_v1.3.1.md;.",
-    "--add-data=TESTING_v1.3.1.md;."
+    "--add-data=RELEASE_NOTES_v1.3.2.md;.",
+    "--add-data=TESTING_v1.3.2.md;."
 )
 
 # Include every tracked top-level guide, including installation and Vault submission.
@@ -55,11 +55,35 @@ python -m PyInstaller `
     --paths "src" `
     --collect-all "guardrails" `
     --collect-all "guardrails_ai.regex_match" `
+    --collect-all "rfc3987_syntax" `
     @addData `
     nwn_ai_gui.py
 
 if (-not (Test-Path "dist\RoleWeaver\RoleWeaver.exe")) {
     throw "PyInstaller build did not create dist\RoleWeaver\RoleWeaver.exe"
+}
+
+if (-not (Test-Path "dist\RoleWeaver\rfc3987_syntax\syntax_rfc3987.lark")) {
+    throw "PyInstaller omitted the Guardrails AI RFC 3987 grammar."
+}
+
+$smokeResult = Join-Path $env:TEMP "roleweaver-guardrails-smoke-$PID.txt"
+$smoke = Start-Process -FilePath (Resolve-Path "dist\RoleWeaver\RoleWeaver.exe") `
+    -ArgumentList "--guardrails-smoke `"$smokeResult`"" -WindowStyle Hidden -PassThru
+try {
+    if (-not $smoke.WaitForExit(90000)) {
+        $smoke.Kill()
+        throw "Packaged Guardrails AI smoke check timed out."
+    }
+    if (-not (Test-Path -LiteralPath $smokeResult)) {
+        throw "Packaged Guardrails AI smoke check produced no result."
+    }
+    $smokeText = (Get-Content -LiteralPath $smokeResult -Raw).Trim()
+    if ($smoke.ExitCode -ne 0 -or $smokeText -ne "active") {
+        throw "Packaged Guardrails AI smoke check failed: $smokeText"
+    }
+} finally {
+    Remove-Item -LiteralPath $smokeResult -ErrorAction SilentlyContinue
 }
 
 Write-Host "Built dist\RoleWeaver\RoleWeaver.exe"

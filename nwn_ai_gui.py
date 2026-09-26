@@ -4223,5 +4223,23 @@ def main():
         guard.close(clean=clean)
 
 
+def guardrails_smoke(result_path):
+    """Exercise the packaged Guardrails backend without opening the GUI."""
+    try:
+        from roleweaver.guardrails import GuardrailsAIBackend
+
+        backend = GuardrailsAIBackend()
+        if backend.error:
+            raise RuntimeError(backend.error)
+        backend.validate_output("A safe reply.", {"purpose": "reply"})
+        result = "active"
+    except Exception as exc:
+        result = f"{type(exc).__name__}: {exc}"
+    storage.atomic_write_text(Path(result_path), result)
+    return result == "active"
+
+
 if __name__ == "__main__":
+    if len(sys.argv) == 3 and sys.argv[1] == "--guardrails-smoke":
+        raise SystemExit(0 if guardrails_smoke(sys.argv[2]) else 1)
     main()

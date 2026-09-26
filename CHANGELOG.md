@@ -1,3 +1,9 @@
+## 1.3.2 — Windows Guardrails packaging fix
+
+- Include the RFC 3987 grammar required by Guardrails AI in packaged Windows
+  builds and verify the finished executable can load and validate with it.
+- No changes to guardrail policy defaults or player-edit behavior.
+
 ## 1.3.1 — Draft workflow and game-text maintenance
 
 - Refine either editable draft in its own language and clear each editor independently.

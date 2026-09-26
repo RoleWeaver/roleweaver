@@ -1,18 +1,18 @@
-# Role Weaver 1.3.1 — Installation
+# Role Weaver 1.3.2 — Installation
 
 Supports Windows and Linux and all NWN/NWN2 editions: Original NWN, Diamond,
 NWN:EE, NWN2, NWN2 EE and NWN2 with Client Extender.
 
 ## Download and install
 
-Choose from the [v1.3.1 release](https://github.com/RoleWeaver/roleweaver/releases/tag/v1.3.1).
+Choose from the [v1.3.2 release](https://github.com/RoleWeaver/roleweaver/releases/tag/v1.3.2).
 
 | Package | Installation |
 | --- | --- |
-| RoleWeaver-Setup-v1.3.1.exe | Run the Windows installer |
-| RoleWeaver-Portable-v1.3.1.zip | Extract fully and run RoleWeaver.exe |
-| RoleWeaver-NeverwinterVault-v1.3.1.zip | Windows portable build with Vault README |
-| RoleWeaver-v1.3.1-Linux.tar.gz | Extract and follow INSTALL_LINUX.md |
+| RoleWeaver-Setup-v1.3.2.exe | Run the Windows installer |
+| RoleWeaver-Portable-v1.3.2.zip | Extract fully and run RoleWeaver.exe |
+| RoleWeaver-NeverwinterVault-v1.3.2.zip | Windows portable build with Vault README |
+| RoleWeaver-v1.3.2-Linux.tar.gz | Extract and follow INSTALL_LINUX.md |
 | GitHub source archive | Windows at root; Linux under linux/ |
 
 **Packaged Windows builds do not require Python.** Keep the supplied folders with
@@ -110,4 +110,4 @@ Copying Python files beside an old executable does not update it.
   use Copy Edited Draft and paste manually.
 - Provider changes with character: provider/model preferences are per profile.
 - Continue with [First Run](FIRST_RUN.md), [Player Guide](PLAYER_GUIDE.md),
-  [DM Guide](DM_GUIDE.md) or [v1.3.1 tests](TESTING_v1.3.1.md).
+  [DM Guide](DM_GUIDE.md) or [v1.3.2 tests](TESTING_v1.3.2.md).

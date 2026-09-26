@@ -1,4 +1,4 @@
-# Role Weaver 1.3.1 — Linux
+# Role Weaver 1.3.2 — Linux
 
 Role Weaver supports all editions of Neverwinter Nights (NWN) and Neverwinter Nights 2 (NWN2), including Original NWN, Diamond, both Enhanced Editions, and NWN2 with Client Extender. Available input features depend on the platform; see [game setup](GAME_VERSIONS.md).
 
@@ -14,8 +14,8 @@ is already the client root. Follow [INSTALL_LINUX.md](INSTALL_LINUX.md), then ru
 bash install-linux.sh and bash start-role-weaver.sh. X11 supports automatic input;
 Wayland uses manual paste.
 
-Read [release notes](RELEASE_NOTES_v1.3.1.md), [game selection](GAME_VERSIONS.md),
-[NWN2 logging](NWN2_LOGGING.md), [AFK](AFK_MODE.md) and [testing](TESTING_v1.3.1.md).
+Read [release notes](RELEASE_NOTES_v1.3.2.md), [game selection](GAME_VERSIONS.md),
+[NWN2 logging](NWN2_LOGGING.md), [AFK](AFK_MODE.md) and [testing](TESTING_v1.3.2.md).
 Keep personal data and backups when updating.
 
 For code contributions, use the repository checkout or the release's
