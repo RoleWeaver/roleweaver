@@ -23,6 +23,7 @@ class UpdateTests(unittest.TestCase):
     def test_versions_and_asset_names(self):
         self.assertTrue(updates.is_newer("1.2.4", "1.2.3"))
         self.assertTrue(updates.is_newer("1.3.1", "1.3.0"))
+        self.assertTrue(updates.is_newer("1.3.2", "1.3.1"))
         self.assertFalse(updates.is_newer("1.2.3", "1.2.3"))
         self.assertEqual(updates.asset_name("1.2.4", "win32"), "RoleWeaver-Setup-v1.2.4.exe")
         self.assertEqual(
