@@ -1,6 +1,6 @@
 # Role Weaver v1.3.2 macOS preview
 
-This preview builds the Role Weaver 1.3.2 client as a native macOS app for Apple Silicon and Intel Macs. It includes the Guardrails AI grammar data file missing from preview5 (and the Windows 1.3.1 package). Both Mac builds now check the file and run Guardrails validation inside the finished app before publication. The app supports NWN log discovery, character profiles, AI drafts, translation, edit recovery, and backups. The fix for the native global hotkey listener crash remains included.
+This preview builds the Role Weaver 1.3.2 client as a native macOS app for Apple Silicon and Intel Macs. It includes the Guardrails AI grammar data file missing from preview5 (and the Windows 1.3.1 package). The Intel build also uses a consistent OpenSSL library for its `cryptography` dependency. Both Mac builds now check the grammar file and run Guardrails validation inside the finished app before publication. The app supports NWN log discovery, character profiles, AI drafts, translation, edit recovery, and backups. The fix for the native global hotkey listener crash remains included.
 
 **New testers:** download `INSTALL_MACOS.md` from the release Assets and follow its first-launch, permission, and Keyboard Test steps before enabling Auto Send or AFK.
 

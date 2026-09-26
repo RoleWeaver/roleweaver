@@ -26,3 +26,8 @@ python -m PyInstaller --noconfirm --clean --windowed --onedir --name RoleWeaver 
   --add-data 'macos/Lore:Lore' --add-data 'macos/RoleplayRules:RoleplayRules' \
   --add-data 'macos/VERSION:.' macos/macos_start.py
 ```
+
+On Intel Macs, recent `cryptography` versions compile from source. Set
+`OPENSSL_DIR="$(brew --prefix openssl@3)"` and `OPENSSL_STATIC=1` and install
+with `--no-cache-dir --no-binary cryptography` as the CI workflow does. This
+prevents an OpenSSL library mismatch in the packaged app.
