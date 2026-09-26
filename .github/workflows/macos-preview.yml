@@ -57,6 +57,9 @@ jobs:
           python -m PyInstaller --noconfirm --clean --windowed --onedir \
             --name RoleWeaver --osx-bundle-identifier com.roleweaver.client \
             --paths src --paths macos \
+            --collect-all guardrails \
+            --collect-all guardrails_ai.regex_match \
+            --collect-all rfc3987_syntax \
             --add-data "macos/assets:assets" \
             --add-data "macos/Characters:Characters" \
             --add-data "macos/Campaigns:Campaigns" \
@@ -80,6 +83,16 @@ jobs:
           PY
           codesign --force --deep --sign - dist/RoleWeaver.app
           codesign --verify --deep --strict dist/RoleWeaver.app
+      - name: Verify packaged Guardrails AI
+        run: |
+          grammar=$(find dist/RoleWeaver.app -path '*/rfc3987_syntax/syntax_rfc3987.lark' -type f -print -quit)
+          test -n "$grammar"
+          smoke_result=$(mktemp "$RUNNER_TEMP/roleweaver-guardrails.XXXXXX")
+          if ! dist/RoleWeaver.app/Contents/MacOS/RoleWeaver --guardrails-smoke "$smoke_result"; then
+            cat "$smoke_result"
+            exit 1
+          fi
+          test "$(cat "$smoke_result")" = active
       - name: Package app and checksums
         run: |
           version=$(cat VERSION)

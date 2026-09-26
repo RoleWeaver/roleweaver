@@ -1,6 +1,6 @@
 # Role Weaver for macOS
 
-This folder contains the macOS client derived from the Linux v1.3.1 client. The GitHub Actions workflow compiles `RoleWeaver.app` for Apple Silicon and Intel Macs.
+This folder contains the macOS preview of Role Weaver v1.3.2. The GitHub Actions workflow compiles `RoleWeaver.app` for Apple Silicon and Intel Macs.
 
 For download and first-launch steps, see [INSTALL_MACOS.md](INSTALL_MACOS.md).
 
@@ -19,7 +19,9 @@ python -m pip install -r macos/requirements.txt 'pyinstaller>=6.0,<7'
 python -m pip install --no-deps -e .
 python -m PyInstaller --noconfirm --clean --windowed --onedir --name RoleWeaver \
   --osx-bundle-identifier com.roleweaver.client \
-  --paths src --paths macos --add-data 'macos/assets:assets' \
+  --paths src --paths macos \
+  --collect-all guardrails --collect-all guardrails_ai.regex_match \
+  --collect-all rfc3987_syntax --add-data 'macos/assets:assets' \
   --add-data 'macos/Characters:Characters' --add-data 'macos/Campaigns:Campaigns' \
   --add-data 'macos/Lore:Lore' --add-data 'macos/RoleplayRules:RoleplayRules' \
   --add-data 'macos/VERSION:.' macos/macos_start.py

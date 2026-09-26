@@ -1,11 +1,11 @@
 # Install Role Weaver on macOS
 
-This is a preview build of Role Weaver 1.3.1 for testing with Neverwinter Nights. The app was compiled on macOS 15 for Apple Silicon and Intel Macs. Live game input still needs tester validation.
+This is a preview build of Role Weaver 1.3.2 for testing with Neverwinter Nights. The app was compiled on macOS 15 for Apple Silicon and Intel Macs. Live game input still needs tester validation.
 
 ## 1. Download the correct ZIP
 
 1. Open the [macOS release page](https://github.com/RoleWeaver/roleweaver/releases) and select the newest **macOS preview** release.
-2. Choose `RoleWeaver-v1.3.1-macOS-arm64.zip` for an Apple Silicon Mac (M-series chip), or `RoleWeaver-v1.3.1-macOS-x86_64.zip` for an Intel Mac. In **Apple menu → About This Mac**, Apple Silicon appears under **Chip** and Intel appears under **Processor**.
+2. Choose `RoleWeaver-v1.3.2-macOS-arm64.zip` for an Apple Silicon Mac (M-series chip), or `RoleWeaver-v1.3.2-macOS-x86_64.zip` for an Intel Mac. In **Apple menu → About This Mac**, Apple Silicon appears under **Chip** and Intel appears under **Processor**.
 3. Double-click the ZIP in Downloads to extract `RoleWeaver.app`. Drag the app to **Applications**. Replace an older `RoleWeaver.app` there if prompted, after closing it. Your profiles and settings are stored separately in `~/Library/Application Support/RoleWeaver`.
 
 ## 2. Open the app the first time
