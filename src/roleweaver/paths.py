@@ -24,6 +24,8 @@ class RuntimePaths:
         """Resolve the data root for source and frozen application launches."""
 
         is_frozen = bool(getattr(sys, "frozen", False)) if frozen is None else frozen
+        if is_frozen and sys.platform == "darwin":
+            return cls(Path.home() / "Library" / "Application Support" / "RoleWeaver")
         location = Path(executable or sys.executable) if is_frozen else Path(entrypoint)
         return cls(location.resolve().parent)
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import platform as system_platform
 import re
 import tempfile
 import urllib.request
@@ -13,6 +14,7 @@ from pathlib import Path
 from . import __version__
 
 RELEASE_API = "https://api.github.com/repos/RoleWeaver/roleweaver/releases/latest"
+MAC_RELEASE_API = "https://api.github.com/repos/RoleWeaver/roleweaver/releases?per_page=100"
 RELEASES_URL = "https://github.com/RoleWeaver/roleweaver/releases"
 MAX_CHECKSUM_BYTES = 2_000_000
 MAX_ASSET_BYTES = 1_500_000_000
@@ -49,11 +51,18 @@ def asset_name(version: str, platform: str, *, portable: bool = False) -> str:
         return f"RoleWeaver-Setup-v{version}.exe"
     if platform == "linux":
         return f"RoleWeaver-v{version}-Linux.tar.gz"
+    if platform == "darwin":
+        arch = "arm64" if system_platform.machine() == "arm64" else "x86_64"
+        return f"RoleWeaver-v{version}-macOS-{arch}.zip"
     raise UpdateError(f"Updates are unavailable for platform {platform!r}.")
 
 
 def can_download(release: Release, platform: str, *, portable: bool = False) -> bool:
-    checksum = "SHA256SUMS-Linux.txt" if platform == "linux" else "SHA256SUMS.txt"
+    mac_arch = "arm64" if system_platform.machine() == "arm64" else "x86_64"
+    checksum = {
+        "linux": "SHA256SUMS-Linux.txt",
+        "darwin": f"SHA256SUMS-macOS-{mac_arch}.txt",
+    }.get(platform, "SHA256SUMS.txt")
     return (
         asset_name(release.version, platform, portable=portable) in release.assets
         and checksum in release.assets
@@ -82,21 +91,41 @@ def _request(url: str, *, limit: int) -> bytes:
     return content
 
 
-def check_latest() -> Release:
-    """Fetch the latest stable release; do not inspect draft/prerelease builds."""
+def _release_from_payload(payload: dict, *, mac: bool = False) -> Release:
+    tag = str(payload["tag_name"])
+    version = tag.removeprefix("mac-v") if mac else tag.removeprefix("v")
+    _version_tuple(version)
+    page_url = str(payload["html_url"])
+    if not _github_url(page_url) or payload.get("draft") or payload.get("prerelease"):
+        raise UpdateError("The release metadata is not a published stable GitHub release.")
+    assets = {
+        str(item["name"]): str(item["browser_download_url"]) for item in payload["assets"]
+    }
+    if any(not _github_url(url) for url in assets.values()):
+        raise UpdateError("The release contains an unexpected download URL.")
+    return Release(version, page_url, str(payload.get("body") or ""), assets)
+
+
+def check_latest(platform: str | None = None) -> Release:
+    """Fetch the latest stable release for the selected platform."""
     try:
+        if platform == "darwin":
+            releases = json.loads(_request(MAC_RELEASE_API, limit=2_000_000))
+            if not isinstance(releases, list):
+                raise UpdateError("GitHub did not return a release list.")
+            candidates = [
+                _release_from_payload(item, mac=True)
+                for item in releases
+                if isinstance(item, dict)
+                and re.fullmatch(r"mac-v\d+\.\d+\.\d+", str(item.get("tag_name", "")))
+                and not item.get("draft")
+                and not item.get("prerelease")
+            ]
+            if not candidates:
+                raise UpdateError("No published stable macOS release was found.")
+            return max(candidates, key=lambda release: _version_tuple(release.version))
         payload = json.loads(_request(RELEASE_API, limit=2_000_000))
-        version = str(payload["tag_name"]).removeprefix("v")
-        _version_tuple(version)
-        page_url = str(payload["html_url"])
-        if not _github_url(page_url) or payload.get("draft") or payload.get("prerelease"):
-            raise UpdateError("The release metadata is not a published stable GitHub release.")
-        assets = {
-            str(item["name"]): str(item["browser_download_url"]) for item in payload["assets"]
-        }
-        if any(not _github_url(url) for url in assets.values()):
-            raise UpdateError("The release contains an unexpected download URL.")
-        return Release(version, page_url, str(payload.get("body") or ""), assets)
+        return _release_from_payload(payload)
     except (OSError, ValueError, KeyError, TypeError) as exc:
         raise UpdateError(f"Could not check releases: {exc}") from exc
 
@@ -118,6 +147,9 @@ def stage_release(
     checksum_url = release.assets.get("SHA256SUMS.txt")
     if platform == "linux":
         checksum_url = release.assets.get("SHA256SUMS-Linux.txt")
+    elif platform == "darwin":
+        arch = "arm64" if system_platform.machine() == "arm64" else "x86_64"
+        checksum_url = release.assets.get(f"SHA256SUMS-macOS-{arch}.txt")
     if not asset_url or not checksum_url:
         raise UpdateError("This release lacks the platform download or checksum file.")
     if not _github_url(asset_url) or not _github_url(checksum_url):

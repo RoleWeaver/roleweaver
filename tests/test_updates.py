@@ -80,6 +80,34 @@ class UpdateTests(unittest.TestCase):
             with self.assertRaises(updates.UpdateError):
                 updates.check_latest()
 
+    def test_mac_release_check_selects_latest_stable_mac_tag(self):
+        def release(tag, *, prerelease=False):
+            version = tag.removeprefix("mac-v")
+            filename = f"RoleWeaver-v{version}-macOS-arm64.zip"
+            return {
+                "tag_name": tag,
+                "html_url": f"https://github.com/RoleWeaver/roleweaver/releases/tag/{tag}",
+                "draft": False,
+                "prerelease": prerelease,
+                "body": "Mac release notes",
+                "assets": [{
+                    "name": filename,
+                    "browser_download_url": f"https://github.com/RoleWeaver/roleweaver/releases/download/{tag}/{filename}",
+                }],
+            }
+
+        payload = [
+            release("mac-v1.3.3-preview1", prerelease=True),
+            release("mac-v1.3.1"),
+            release("mac-v1.3.2"),
+            release("v1.3.4"),
+        ]
+        with patch.object(updates, "_request", return_value=json.dumps(payload).encode()) as request:
+            result = updates.check_latest("darwin")
+        request.assert_called_once_with(updates.MAC_RELEASE_API, limit=2_000_000)
+        self.assertEqual(result.version, "1.3.2")
+        self.assertEqual(result.page_url, "https://github.com/RoleWeaver/roleweaver/releases/tag/mac-v1.3.2")
+
     def test_stage_rejects_corrupt_download_without_replacing_existing_file(self):
         filename = updates.asset_name("1.2.4", "linux")
         release = updates.Release(

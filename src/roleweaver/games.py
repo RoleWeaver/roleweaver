@@ -37,8 +37,21 @@ GAME_FIELDS = (
 def game_directories(game, home=None, environ=None, platform=None):
     home = Path(home or Path.home())
     env = os.environ if environ is None else environ
-    linux = (platform or sys.platform).startswith("linux")
+    system = platform or sys.platform
+    linux = system.startswith("linux")
     nwn2 = game.startswith("nwn2")
+    if system == "darwin":
+        if game == "nwn_ee":
+            roots = [
+                home / "Documents/Neverwinter Nights/logs",
+                home / "Library/Application Support/Neverwinter Nights/logs",
+            ]
+            if env.get("NWN_USER_DIRECTORY"):
+                roots.insert(0, Path(env["NWN_USER_DIRECTORY"]).expanduser() / "logs")
+            return roots
+        if not nwn2:
+            return [home / "Documents/Neverwinter Nights/logs"]
+        return [home / "Documents/Neverwinter Nights 2/Logs"]
     if not linux:
         if game == "nwn_ee":
             return [home / "Documents/Neverwinter Nights/logs"]
