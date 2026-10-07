@@ -1,10 +1,10 @@
-name: Build macOS preview
+name: Build macOS release
 
 on:
   workflow_dispatch:
   push:
     tags:
-      - "mac-v*-preview*"
+      - "mac-v*"
 
 permissions:
   contents: write
@@ -44,6 +44,7 @@ jobs:
           python -m compileall -q macos src
           python -m unittest discover -s tests -p 'test_mac*.py' -v
           python -m unittest discover -s tests -p 'test_translation.py' -v
+          python -m unittest discover -s tests -p 'test_updates.py' -v
           PYTHONPATH=macos:src python - <<'PY'
           import subprocess
           import tempfile
@@ -128,14 +129,18 @@ jobs:
           merge-multiple: true
       - name: Verify matching source version
         run: |
-          [[ "$GITHUB_REF_NAME" =~ ^mac-v$(cat VERSION)-preview[0-9]+$ ]]
+          [[ "$GITHUB_REF_NAME" =~ ^mac-v$(cat VERSION)(-preview[0-9]+)?$ ]]
           cp macos/INSTALL_MACOS.md release/INSTALL_MACOS.md
-      - name: Publish preview downloads
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: Role Weaver ${{ github.ref_name }}
-          prerelease: true
-          body_path: macos/RELEASE_NOTES_MACOS.md
-          files: release/*
-          fail_on_unmatched_files: true
+      - name: Publish macOS downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "$GITHUB_REF_NAME" == *-preview* ]]; then
+            gh release create "$GITHUB_REF_NAME" release/* --verify-tag \
+              --title "Role Weaver $GITHUB_REF_NAME" \
+              --notes-file macos/RELEASE_NOTES_MACOS.md --prerelease
+          else
+            gh release create "$GITHUB_REF_NAME" release/* --verify-tag \
+              --title "Role Weaver macOS v$(cat VERSION)" \
+              --notes-file macos/RELEASE_NOTES_MACOS.md --latest=false
+          fi

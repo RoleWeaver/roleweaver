@@ -1,15 +1,13 @@
-# Role Weaver v1.3.2 macOS preview
+# Role Weaver v1.3.2 for macOS
 
-This preview builds the Role Weaver 1.3.2 client as a native macOS app for Apple Silicon and Intel Macs. It includes the Guardrails AI grammar data file missing from preview5 (and the Windows 1.3.1 package). The Intel build also uses a consistent OpenSSL library for its `cryptography` dependency. Both Mac builds now check the grammar file and run Guardrails validation inside the finished app before publication. The app supports NWN log discovery, character profiles, AI drafts, translation, edit recovery, and backups. The fix for the native global hotkey listener crash remains included.
+This is the stable macOS release following testing of the v1.3.2 preview. Download the ZIP for your Mac's processor: `arm64` for Apple Silicon or `x86_64` for Intel. The release Assets also include `INSTALL_MACOS.md` and SHA-256 checksums.
 
-**New testers:** download `INSTALL_MACOS.md` from the release Assets and follow its first-launch, permission, and Keyboard Test steps before enabling Auto Send or AFK.
+Role Weaver supports NWN log discovery, character profiles, AI drafts, translation, edit recovery, backups, automatic replies, and AFK emotes. Automatic game input uses macOS System Events with foreground-process checks. Global function-key hotkeys remain disabled; use the on-screen controls.
 
-Automatic replies and AFK emotes can be sent to NWN through macOS System Events. The sender checks the foreground process before opening chat, after opening chat, and before submitting. Manual drafts are pasted without pressing Enter. Use the on-screen controls; global function-key hotkeys are disabled in this preview.
+The packaged app includes the Guardrails AI grammar data and runs a Guardrails validation check before publication. The Intel build uses a consistent OpenSSL library for its `cryptography` dependency. Both architectures are compiled, ad hoc signed, and checked by GitHub Actions.
 
-Grant `RoleWeaver` access in **System Settings → Privacy & Security → Accessibility**, and allow its **Automation** request for System Events. Run **Keyboard Test** with NWN open before enabling automatic or AFK sending; the test pastes an unsent line that you can cancel with Escape. These desktop permissions and actual NWN chat behavior still require live testing on a Mac.
+To enable game input, grant Role Weaver **Accessibility** access and allow its **Automation** request for System Events. Run **Keyboard Test** with NWN open before enabling Auto Send or AFK. The test pastes an unsent line that you can cancel with Escape.
 
-Download the ZIP matching your Mac processor, unzip it, and move `RoleWeaver.app` to Applications. The app is ad hoc signed and not notarized; macOS may require **Control-click → Open** on first launch. Personal data is stored in `~/Library/Application Support/RoleWeaver` and is kept when the app is replaced.
+The app is not Apple notarized, so macOS may require **Open Anyway** on first launch. Personal data is stored in `~/Library/Application Support/RoleWeaver` and is kept when the app is replaced. See `INSTALL_MACOS.md` for installation and troubleshooting steps.
 
-The in-app updater checks stable releases only and does not offer macOS previews. Download this preview manually from this release page, replace the old app after quitting it, then check **Guardrails & Usage → Overview** for an active Guardrails AI backend.
-
-This build has automated compilation and unit checks on macOS runners. Live Neverwinter Nights gameplay has not yet been verified on a Mac.
+The in-app updater checks stable macOS releases. To install this release over a preview, quit Role Weaver, replace `RoleWeaver.app` in Applications, then reopen it.

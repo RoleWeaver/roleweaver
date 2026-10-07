@@ -93,7 +93,7 @@ class UpdatePanel:
         if self.busy:
             return
         self.status.configure(text="Checking the latest stable release…")
-        self._work("check", check_latest)
+        self._work("check", lambda: check_latest(self.platform))
 
     def download(self):
         if self.busy or self.release is None:

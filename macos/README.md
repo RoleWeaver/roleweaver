@@ -1,10 +1,10 @@
 # Role Weaver for macOS
 
-This folder contains the macOS preview of Role Weaver v1.3.2. The GitHub Actions workflow compiles `RoleWeaver.app` for Apple Silicon and Intel Macs.
+This folder contains Role Weaver v1.3.2 for macOS. The GitHub Actions workflow compiles `RoleWeaver.app` for Apple Silicon and Intel Macs.
 
 For download and first-launch steps, see [INSTALL_MACOS.md](INSTALL_MACOS.md).
 
-The app supports automatic game input and AFK sending through macOS System Events. Before enabling either mode, open **System Settings → Privacy & Security → Accessibility** and allow `RoleWeaver`; allow its **Automation** request to control System Events when prompted. Use **Keyboard Test** while NWN is running: it opens chat and pastes an unsent test line. Press Escape in NWN to discard that line. Confirm that test before using **Auto Send** or **AFK**. Both modes start off and can be toggled in the Controls panel. Use the on-screen controls; global function-key hotkeys are disabled in this preview. If the game uses a different window or process name, change **Window Title Contains** in settings.
+The app supports automatic game input and AFK sending through macOS System Events. Before enabling either mode, open **System Settings → Privacy & Security → Accessibility** and allow `RoleWeaver`; allow its **Automation** request to control System Events when prompted. Use **Keyboard Test** while NWN is running: it opens chat and pastes an unsent test line. Press Escape in NWN to discard that line. Confirm that test before using **Auto Send** or **AFK**. Both modes start off and can be toggled in the Controls panel. Use the on-screen controls; global function-key hotkeys are disabled in this release. If the game uses a different window or process name, change **Window Title Contains** in settings.
 
 Generate or translate a manual draft, then use the draft controls to place it in the NWN chat field for review. The game log remains the source of truth for what was actually sent. To find logs automatically, NWN:EE should write to `~/Documents/Neverwinter Nights/logs`; the app also checks `~/Library/Application Support/Neverwinter Nights/logs`. Select a log manually if your installation uses another path.
 

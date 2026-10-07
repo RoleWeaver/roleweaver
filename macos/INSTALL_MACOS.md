@@ -1,16 +1,16 @@
 # Install Role Weaver on macOS
 
-This is a preview build of Role Weaver 1.3.2 for testing with Neverwinter Nights. The app was compiled on macOS 15 for Apple Silicon and Intel Macs. Live game input still needs tester validation.
+This is the Role Weaver 1.3.2 release for macOS, compiled on macOS 15 for Apple Silicon and Intel Macs.
 
 ## 1. Download the correct ZIP
 
-1. Open the [macOS release page](https://github.com/RoleWeaver/roleweaver/releases) and select the newest **macOS preview** release.
+1. Open the [macOS v1.3.2 release](https://github.com/RoleWeaver/roleweaver/releases/tag/mac-v1.3.2).
 2. Choose `RoleWeaver-v1.3.2-macOS-arm64.zip` for an Apple Silicon Mac (M-series chip), or `RoleWeaver-v1.3.2-macOS-x86_64.zip` for an Intel Mac. In **Apple menu → About This Mac**, Apple Silicon appears under **Chip** and Intel appears under **Processor**.
 3. Double-click the ZIP in Downloads to extract `RoleWeaver.app`. Drag the app to **Applications**. Replace an older `RoleWeaver.app` there if prompted, after closing it. Your profiles and settings are stored separately in `~/Library/Application Support/RoleWeaver`.
 
 ## 2. Open the app the first time
 
-Double-click `RoleWeaver.app` in Applications. This preview is ad hoc signed and not Apple notarized, so macOS may block its first launch. If you trust the ZIP you downloaded from this release, try opening the app once, then go to **System Settings → Privacy & Security**, scroll down, and choose **Open Anyway** for RoleWeaver. Confirm **Open** when macOS asks again. Apple's [app-opening instructions](https://support.apple.com/en-gb/102445) explain this step. Do not change the system-wide app security setting.
+Double-click `RoleWeaver.app` in Applications. This release is ad hoc signed and not Apple notarized, so macOS may block its first launch. If you trust the ZIP you downloaded from this release, try opening the app once, then go to **System Settings → Privacy & Security**, scroll down, and choose **Open Anyway** for RoleWeaver. Confirm **Open** when macOS asks again. Apple's [app-opening instructions](https://support.apple.com/en-gb/102445) explain this step. Do not change the system-wide app security setting.
 
 ## 3. Set up Role Weaver
 
@@ -23,7 +23,7 @@ Double-click `RoleWeaver.app` in Applications. This preview is ad hoc signed and
 1. Open **System Settings → Privacy & Security → Accessibility** and allow `RoleWeaver`. If it is not listed, add `RoleWeaver.app` from Applications. See [Apple's Accessibility instructions](https://support.apple.com/en-gu/guide/mac-help/mh43185/mac).
 2. When macOS asks whether RoleWeaver may control **System Events**, choose **Allow**. If you previously denied it, review **System Settings → Privacy & Security → Automation**. See [Apple's Automation instructions](https://support.apple.com/en-mz/guide/mac-help/mchl108e1718/mac).
 3. With NWN running, click **Keyboard Test** in Role Weaver. Switch to the NWN window during the countdown. The test should open chat and paste a line **without sending it**. Press **Escape** in NWN to discard the line. If the test fails, leave Auto Send and AFK off and check the activity message and permissions.
-4. Once the test succeeds, use **Auto Send OFF** to enable automatic replies or **AFK OFF** to enable AFK emotes. Both modes start off each session. Use the on-screen buttons; global function-key hotkeys are disabled in this preview.
+4. Once the test succeeds, use **Auto Send OFF** to enable automatic replies or **AFK OFF** to enable AFK emotes. Both modes start off each session. Use the on-screen buttons; global function-key hotkeys are disabled in this release.
 
 ## If something does not work
 
